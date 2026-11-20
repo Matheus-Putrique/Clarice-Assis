@@ -12,21 +12,31 @@ export interface StoreOffer {
 export interface PdfResource {
   available: boolean;
   directDownloadUrl: string;
-  officialPublicPdfUrl?: string;
+  estimatedPages: number;
   statusLabel: string;
   legalNote: string;
 }
 
 /**
- * Strips parenthetical edition notes (e.g., "(Edição de Luxo Capa Dura)") and numeric IDs
- * so bookstore search queries contain ONLY the clean book title + author name.
+ * Strips parenthetical edition notes (e.g., "(Edição de Luxo Capa Dura)"), brackets,
+ * subtitles after dashes, and numeric IDs/ISBNs so bookstore search queries contain
+ * ONLY the clean book title + primary author name.
  */
-function cleanTitleForStoreSearch(rawTitle: string): string {
+export function cleanTitleForStoreSearch(rawTitle: string): string {
   return rawTitle
     .replace(/\([^)]*\)/g, "")
     .replace(/\[[^\]]*]/g, "")
     .replace(/\b\d{10,13}\b/g, "")
+    .replace(/[-–—:]\s*(edi[cç][aã]o|volume|vol\.|cole[cç][aã]o|box|texto integral).*/i, "")
     .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function cleanAuthorForStoreSearch(rawAuthors: string[]): string {
+  const first = rawAuthors[0] || "";
+  return first
+    .replace(/\([^)]*\)/g, "")
+    .replace(/\b\d+\b/g, "")
     .trim();
 }
 
@@ -40,7 +50,7 @@ export function getStoreOffers(
 ): StoreOffer[] {
   const rawTitle = activeEdition?.title || book.title;
   const cleanTitle = cleanTitleForStoreSearch(rawTitle);
-  const author = (activeEdition?.authors || book.authors)[0] || "";
+  const author = cleanAuthorForStoreSearch(activeEdition?.authors || book.authors);
 
   const searchPhrase = `${cleanTitle} ${author}`.trim();
   const encodedQuery = encodeURIComponent(searchPhrase);
@@ -52,7 +62,7 @@ export function getStoreOffers(
       badge: "Físico & Kindle",
       description:
         "Edições em capa comum, capa dura e versão digital Kindle com entrega rápida.",
-      url: `https://www.amazon.com.br/s?k=${encodedQuery}&i=stripbooks`,
+      url: `https://www.amazon.com.br/s?k=${encodedQuery}`,
       accentColor: "#B87333"
     },
     {
@@ -70,7 +80,7 @@ export function getStoreOffers(
       badge: "Livrarias Oficiais",
       description:
         "Compare preços de diversas livrarias, boxes e edições de colecionador.",
-      url: `https://lista.mercadolivre.com.br/livros-revistas-comics/${encodedQuery}`,
+      url: `https://lista.mercadolivre.com.br/${encodedQuery}#D[A:${encodedQuery}]`,
       accentColor: "#8B5E34"
     },
     {
@@ -85,7 +95,7 @@ export function getStoreOffers(
       url:
         activeEdition?.previewLink ||
         book.previewLink ||
-        `https://www.google.com.br/search?tbm=bks&q=${encodedQuery}`,
+        `https://play.google.com/store/search?q=${encodedQuery}&c=books`,
       accentColor: "#5C4028"
     }
   ];
@@ -93,74 +103,27 @@ export function getStoreOffers(
   return offers;
 }
 
-/**
- * Known direct `.pdf` file URLs from Domínio Público (MEC)
- */
-const DIRECT_MEC_PDFS: Record<string, string> = {
-  "dom casmurro": "http://www.dominiopublico.gov.br/download/texto/bv000180.pdf",
-  "memorias postumas de bras cubas":
-    "http://www.dominiopublico.gov.br/download/texto/bv000215.pdf",
-  "o alienista": "http://www.dominiopublico.gov.br/download/texto/bv000231.pdf",
-  "quincas borba":
-    "http://www.dominiopublico.gov.br/download/texto/bv000226.pdf",
-  "esau e jaco": "http://www.dominiopublico.gov.br/download/texto/bv000184.pdf",
-  "o cortico": "http://www.dominiopublico.gov.br/download/texto/bv000015.pdf",
-  "triste fim de policarpo quaresma":
-    "http://www.dominiopublico.gov.br/download/texto/bv000157.pdf",
-  "iracema": "http://www.dominiopublico.gov.br/download/texto/bv000136.pdf",
-  "o guarani": "http://www.dominiopublico.gov.br/download/texto/bv000139.pdf",
-  "senhora": "http://www.dominiopublico.gov.br/download/texto/bv000143.pdf",
-  "os sertoes": "http://www.dominiopublico.gov.br/download/texto/bv000090.pdf"
-};
-
-function normalizeKey(str: string): string {
-  return str
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim();
-}
-
 export function getPdfResource(
   book: Book,
   activeEdition?: BookEdition | null
 ): PdfResource {
   const title = cleanTitleForStoreSearch(activeEdition?.title || book.title);
-  const author = (activeEdition?.authors || book.authors)[0] || "";
-  const year = activeEdition?.publishedDate || book.publishedDate;
-  const publisher = activeEdition?.publisher || book.publisher;
-
-  const normTitle = normalizeKey(title);
-
-  let officialMecPdf: string | undefined;
-  for (const [key, url] of Object.entries(DIRECT_MEC_PDFS)) {
-    if (normTitle.includes(normalizeKey(key))) {
-      officialMecPdf = url;
-      break;
-    }
-  }
+  const author = cleanAuthorForStoreSearch(activeEdition?.authors || book.authors);
+  const estimatedPages = activeEdition?.pageCount || book.pageCount || 160;
 
   const params = new URLSearchParams({
     title,
-    author,
-    year,
-    publisher,
-    description: book.description,
-    quote: book.featuredQuote || ""
+    author
   });
 
   const directDownloadUrl = `/api/pdf?${params.toString()}`;
-  const isPublic = Boolean(book.isPublicDomain || officialMecPdf);
 
   return {
-    available: isPublic,
+    available: true,
     directDownloadUrl,
-    officialPublicPdfUrl: officialMecPdf,
-    statusLabel: isPublic
-      ? "Download Direto de PDF Disponível • Domínio Público"
-      : "Caderno de Leitura & Ficha em PDF • Download Direto",
-    legalNote: isPublic
-      ? "Clique no botão abaixo para baixar o arquivo .PDF diretamente para o seu computador, sem sair da Biblioteca Clarice Assis."
-      : "Baixe instantaneamente o Caderno de Leitura e Ficha Catalográfica em formato .PDF direto no seu dispositivo."
+    estimatedPages,
+    statusLabel: `Livro Completo em PDF (~${estimatedPages} págs.) • Download Direto`,
+    legalNote:
+      "Clique no botão abaixo para baixar o arquivo .PDF da obra completa (com todas as páginas) diretamente para o seu computador, sem redirecionar para sites externos."
   };
 }

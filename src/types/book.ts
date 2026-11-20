@@ -12,6 +12,31 @@ export interface BookEdition {
   previewLink?: string;
 }
 
+export type ReadingVibeTag =
+  | "Leitura Obrigatória"
+  | "Arrebatador & Profundo"
+  | "Clássico Atemporal"
+  | "Leitura Fluida"
+  | "Reflexivo & Filosófico"
+  | "Final Inesquecível";
+
+export interface BookReview {
+  id: string;
+  bookKey: string;
+  bookTitle: string;
+  readerName: string;
+  readerRole?: string;
+  rating: number; // 1 to 5
+  vibeTag: ReadingVibeTag;
+  title: string;
+  comment: string;
+  createdAt: string;
+  likes: number;
+  verifiedReader?: boolean;
+  sourceStore?: string;
+  sourceUrl?: string;
+}
+
 export interface Book {
   id: string;
   title: string;
@@ -39,5 +64,6 @@ export interface BookCategory {
   id: string;
   label: string;
   query: string;
+  subQueries: string[];
   description: string;
 }

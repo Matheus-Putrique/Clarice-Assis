@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Book, BookEdition } from "@/types/book";
 import { BOOK_CATEGORIES, CURATED_BOOKS } from "@/data/curated-books";
 import { getStoreOffers, getPdfResource } from "@/lib/book-links";
+import BookReviewsSection from "@/components/BookReviewsSection";
 import {
   Search,
   BookOpen,
@@ -25,24 +26,117 @@ import {
   ArrowRight,
   Layers,
   ExternalLink,
-  ShieldCheck
+  ShieldCheck,
+  Shuffle,
+  SlidersHorizontal,
+  PlusCircle
 } from "lucide-react";
 
 export default function ClariceAssisLibrary() {
   const [books, setBooks] = useState<Book[]>(CURATED_BOOKS);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<string>("acervo-clarice-assis");
+  const [activeSubTopic, setActiveSubTopic] = useState<string>("");
+  const [currentQuery, setCurrentQuery] = useState<string>("");
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [hasMoreBooks, setHasMoreBooks] = useState<boolean>(true);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [shelfFilter, setShelfFilter] = useState("");
+  const [sortBy, setSortBy] = useState<"relevancia" | "nota" | "ano" | "titulo">("relevancia");
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [activeEdition, setActiveEdition] = useState<BookEdition | null>(null);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [savedIds, setSavedIds] = useState<string[]>([]);
   const [showingSavedOnly, setShowingSavedOnly] = useState(false);
   const [searchLabel, setSearchLabel] = useState<string>("Acervo de Honra: Clarice & Assis");
 
+  // Google-style live autocomplete suggestions state
+  const [suggestions, setSuggestions] = useState<Book[]>([]);
+  const [isSuggesting, setIsSuggesting] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
+  const searchContainerRef = useRef<HTMLFormElement | null>(null);
+
   const openBookModal = (book: Book) => {
     setSelectedBook(book);
     setActiveEdition(book.editions && book.editions.length > 0 ? book.editions[0] : null);
+    setIsDownloadingPdf(false);
+    setShowSuggestions(false);
   };
+
+  // Close autocomplete dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        searchContainerRef.current &&
+        !searchContainerRef.current.contains(event.target as Node)
+      ) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Debounced live autocomplete fetch as the user types
+  useEffect(() => {
+    const trimmed = searchQuery.trim();
+    if (trimmed.length < 2) {
+      setSuggestions([]);
+      setIsSuggesting(false);
+      setHighlightedIndex(-1);
+      return;
+    }
+
+    const norm = trimmed
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+
+    // Instant local matches from curated & currently loaded books first
+    const localMatches = [...CURATED_BOOKS, ...books]
+      .filter(
+        (b, idx, arr) =>
+          arr.findIndex((x) => x.title.toLowerCase() === b.title.toLowerCase()) === idx &&
+          (b.title
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .includes(norm) ||
+            b.authors.some((a) =>
+              a
+                .toLowerCase()
+                .normalize("NFD")
+                .replace(/[\u0300-\u036f]/g, "")
+                .includes(norm)
+            ))
+      )
+      .slice(0, 5);
+
+    if (localMatches.length > 0) {
+      setSuggestions(localMatches);
+    }
+
+    setIsSuggesting(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/books?q=${encodeURIComponent(trimmed)}&page=1&limit=8`
+        );
+        const data = await res.json();
+        if (Array.isArray(data.books)) {
+          setSuggestions(data.books.slice(0, 6));
+        }
+      } catch {
+        // Keep local matches if network fails
+      } finally {
+        setIsSuggesting(false);
+      }
+    }, 220);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery, books]);
 
   // Load initial grouped curated books from our API on mount
   useEffect(() => {
@@ -81,20 +175,19 @@ export default function ClariceAssisLibrary() {
 
   const performSearch = async (query: string, label?: string) => {
     setShowingSavedOnly(false);
-    if (!query.trim()) {
-      setBooks(CURATED_BOOKS);
-      setSearchLabel("Acervo de Honra: Clarice & Assis");
-      return;
-    }
+    setShelfFilter("");
+    setCurrentPage(1);
+    setCurrentQuery(query);
 
     setIsLoading(true);
-    setSearchLabel(label || `Resultados para "${query}"`);
+    setSearchLabel(label || (query.trim() ? `Resultados para "${query}"` : "Acervo de Honra: Clarice & Assis"));
 
     try {
-      const res = await fetch(`/api/books?q=${encodeURIComponent(query)}`);
+      const res = await fetch(`/api/books?q=${encodeURIComponent(query)}&page=1&limit=12`);
       const data = await res.json();
       if (Array.isArray(data.books)) {
         setBooks(data.books);
+        setHasMoreBooks(Boolean(data.hasMore));
       }
     } catch {
       setBooks(CURATED_BOOKS);
@@ -103,27 +196,90 @@ export default function ClariceAssisLibrary() {
     }
   };
 
+  const handleLoadMoreBooks = async () => {
+    const nextPage = currentPage + 1;
+    setIsLoadingMore(true);
+    try {
+      const res = await fetch(
+        `/api/books?q=${encodeURIComponent(currentQuery)}&page=${nextPage}&limit=12`
+      );
+      const data = await res.json();
+      if (Array.isArray(data.books)) {
+        setBooks(data.books);
+        setCurrentPage(nextPage);
+        setHasMoreBooks(Boolean(data.hasMore));
+      }
+    } catch {
+      // ignore
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
+
+  const handleSurpriseDiscovery = () => {
+    const allTopics = BOOK_CATEGORIES.flatMap((c) => c.subQueries);
+    const randomTopic =
+      allTopics[Math.floor(Math.random() * allTopics.length)] || "Machado de Assis";
+    setActiveSubTopic(randomTopic);
+    performSearch(randomTopic, `Descoberta Literária: ${randomTopic}`);
+  };
+
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setActiveCategory("");
+    setActiveSubTopic("");
     performSearch(searchQuery);
   };
 
   const handleCategorySelect = (catId: string, query: string, label: string) => {
     setActiveCategory(catId);
+    setActiveSubTopic("");
     setSearchQuery("");
     if (catId === "acervo-clarice-assis") {
-      setShowingSavedOnly(false);
-      setBooks(CURATED_BOOKS);
-      setSearchLabel("Acervo de Honra: Clarice & Assis");
+      performSearch("", "Acervo de Honra: Clarice & Assis");
       return;
     }
     performSearch(query, `Estante: ${label}`);
   };
 
-  const displayedBooks = showingSavedOnly
-    ? books.filter((b) => savedIds.includes(b.id))
-    : books;
+  const currentCategoryObj =
+    BOOK_CATEGORIES.find((c) => c.id === activeCategory) || BOOK_CATEGORIES[0];
+
+  // Apply local shelf filter and sorting (all books are already automatically localized to PT-BR by the backend)
+  const displayedBooks = books
+    .filter((b) => {
+      if (showingSavedOnly && !savedIds.includes(b.id)) return false;
+      if (shelfFilter.trim()) {
+        const term = shelfFilter
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "");
+        const titleMatch = b.title
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .includes(term);
+        const authorMatch = b.authors.some((a) =>
+          a
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .includes(term)
+        );
+        if (!titleMatch && !authorMatch) return false;
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      if (sortBy === "nota") return b.averageRating - a.averageRating;
+      if (sortBy === "titulo") return a.title.localeCompare(b.title);
+      if (sortBy === "ano") {
+        const ya = parseInt(a.publishedDate, 10) || 0;
+        const yb = parseInt(b.publishedDate, 10) || 0;
+        return yb - ya;
+      }
+      return 0;
+    });
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -138,7 +294,7 @@ export default function ClariceAssisLibrary() {
           </div>
           <div className="flex items-center gap-4 text-[11px] uppercase tracking-wider text-[#C89D54]">
             <span className="flex items-center gap-1">
-              <Sparkles className="w-3 h-3" /> Fase 2 Ativa: PDFs & Livrarias Integradas
+              <Sparkles className="w-3 h-3" /> Fase 3 Ativa: Comunidade, Notas & Resenhas
             </span>
           </div>
         </div>
@@ -187,12 +343,14 @@ export default function ClariceAssisLibrary() {
       </header>
 
       {/* Cozy Classic Hero Section */}
-      <section className="relative overflow-hidden bg-gradient-to-b from-[#2C1E16] via-[#36251B] to-[#261912] text-[#FBF8F3] border-b-4 border-[#C89D54]">
+      <section className="relative bg-gradient-to-b from-[#2C1E16] via-[#36251B] to-[#261912] text-[#FBF8F3] border-b-4 border-[#C89D54]">
         {/* Decorative warm glow */}
-        <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full bg-[#C89D54]/10 blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-24 -right-24 w-96 h-96 rounded-full bg-[#8B5E34]/15 blur-3xl pointer-events-none" />
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full bg-[#C89D54]/10 blur-3xl" />
+          <div className="absolute -bottom-24 -right-24 w-96 h-96 rounded-full bg-[#8B5E34]/15 blur-3xl" />
+        </div>
 
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-16 relative z-10">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-16 relative z-20">
           <div className="max-w-3xl mx-auto text-center space-y-5">
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#4A3525]/80 border border-[#C89D54]/40 text-[#E6C786] text-xs font-medium">
               <Coffee className="w-3.5 h-3.5" />
@@ -204,27 +362,74 @@ export default function ClariceAssisLibrary() {
             </h1>
 
             <p className="font-serif-body text-base sm:text-lg text-[#D9CBB8] max-w-2xl mx-auto leading-relaxed">
-              Pesquise em um catálogo global de milhões de obras. Consulte fichas técnicas, edições em PDF de domínio público, links de livrarias e resenhas da comunidade.
+              Pesquise em um catálogo global de milhões de obras individuais. Consulte fichas técnicas, edições em PDF completo, links de livrarias e resenhas da comunidade.
             </p>
 
-            {/* Main Hero Search Box */}
+            {/* Main Hero Search Box with Google-Style Live Autocomplete Dropdown */}
             <form
-              onSubmit={handleFormSubmit}
-              className="mt-6 max-w-2xl mx-auto relative group"
+              ref={searchContainerRef}
+              onSubmit={(e) => {
+                if (
+                  showSuggestions &&
+                  highlightedIndex >= 0 &&
+                  suggestions[highlightedIndex]
+                ) {
+                  e.preventDefault();
+                  const chosen = suggestions[highlightedIndex];
+                  setSearchQuery(chosen.title);
+                  setShowSuggestions(false);
+                  openBookModal(chosen);
+                  return;
+                }
+                setShowSuggestions(false);
+                handleFormSubmit(e);
+              }}
+              className="mt-6 max-w-2xl mx-auto relative group text-left"
             >
-              <div className="flex items-center bg-[#FBF8F3] rounded-2xl p-2 shadow-2xl border-2 border-[#C89D54]/60 focus-within:border-[#E2B86B] transition-all">
+              <div
+                className={`flex items-center bg-[#FBF8F3] p-2 shadow-2xl border-2 transition-all ${
+                  showSuggestions && searchQuery.trim().length >= 2
+                    ? "rounded-t-2xl border-[#E2B86B]"
+                    : "rounded-2xl border-[#C89D54]/60 focus-within:border-[#E2B86B]"
+                }`}
+              >
                 <Search className="w-5 h-5 text-[#6E5641] ml-3 mr-2 shrink-0" />
                 <input
                   type="text"
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Digite o nome de um livro, autor ou tema (ex: Dom Casmurro, Kafka, Filosofia)..."
+                  onFocus={() => setShowSuggestions(true)}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setShowSuggestions(true);
+                    setHighlightedIndex(-1);
+                  }}
+                  onKeyDown={(e) => {
+                    if (!showSuggestions || suggestions.length === 0) return;
+                    if (e.key === "ArrowDown") {
+                      e.preventDefault();
+                      setHighlightedIndex((prev) =>
+                        prev < suggestions.length - 1 ? prev + 1 : 0
+                      );
+                    } else if (e.key === "ArrowUp") {
+                      e.preventDefault();
+                      setHighlightedIndex((prev) =>
+                        prev > 0 ? prev - 1 : suggestions.length - 1
+                      );
+                    } else if (e.key === "Escape") {
+                      setShowSuggestions(false);
+                    }
+                  }}
+                  placeholder="Digite o nome de um livro ou autor (sugestões aparecem ao digitar)..."
                   className="w-full py-2.5 px-2 bg-transparent text-[#2C1E16] placeholder-[#8C735B] text-sm sm:text-base focus:outline-none"
                 />
                 {searchQuery && (
                   <button
                     type="button"
-                    onClick={() => setSearchQuery("")}
+                    onClick={() => {
+                      setSearchQuery("");
+                      setSuggestions([]);
+                      setShowSuggestions(false);
+                    }}
                     className="p-1.5 text-[#8C735B] hover:text-[#2C1E16] cursor-pointer"
                   >
                     <X className="w-4 h-4" />
@@ -238,6 +443,109 @@ export default function ClariceAssisLibrary() {
                   {isLoading ? "Consultando..." : "Pesquisar Obra"}
                 </button>
               </div>
+
+              {/* Google-Style Instant Suggestions Dropdown */}
+              {showSuggestions && searchQuery.trim().length >= 2 && (
+                <div className="absolute left-0 right-0 top-full bg-[#FBF8F3] border-x-2 border-b-2 border-[#E2B86B] rounded-b-2xl shadow-2xl overflow-hidden z-50 divide-y divide-[#EAE0CE]">
+                  <div className="px-4 py-2 bg-[#F3EDE2] flex items-center justify-between text-[11px] font-semibold text-[#7A6048]">
+                    <span className="flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-[#C89D54]" />
+                      {isSuggesting
+                        ? "Buscando obras individuais no acervo..."
+                        : `Sugestões instantâneas para "${searchQuery.trim()}"`}
+                    </span>
+                    <span className="hidden sm:inline text-[10px] text-[#8C735B]">
+                      Use ↑↓ ou clique para abrir
+                    </span>
+                  </div>
+
+                  {suggestions.length === 0 && !isSuggesting ? (
+                    <div className="p-4 text-center text-xs text-[#6E5641]">
+                      Pressione <strong>Enter</strong> ou clique em{" "}
+                      <strong>Pesquisar Obra</strong> para buscar no acervo completo.
+                    </div>
+                  ) : (
+                    <div className="max-h-80 overflow-y-auto divide-y divide-[#EAE0CE]">
+                      {suggestions.map((sug, idx) => {
+                        const isHighlighted = idx === highlightedIndex;
+                        return (
+                          <div
+                            key={sug.id}
+                            onMouseEnter={() => setHighlightedIndex(idx)}
+                            onClick={() => {
+                              setSearchQuery(sug.title);
+                              setShowSuggestions(false);
+                              openBookModal(sug);
+                            }}
+                            className={`flex items-center justify-between gap-3 px-4 py-2.5 cursor-pointer transition-colors ${
+                              isHighlighted
+                                ? "bg-[#E8DEC8]"
+                                : "hover:bg-[#F3EDE2]"
+                            }`}
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-9 h-13 rounded bg-[#2C1E16] overflow-hidden shrink-0 border border-[#C89D54]/50 shadow-2xs">
+                                {sug.thumbnail && (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                    src={sug.thumbnail}
+                                    alt={sug.title}
+                                    className="w-full h-full object-cover"
+                                  />
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="font-serif-title font-bold text-sm text-[#2C1E16] truncate">
+                                  {sug.title}
+                                </p>
+                                <p className="text-xs text-[#5C4028] truncate">
+                                  {sug.authors.join(", ")} •{" "}
+                                  <span className="text-[#7A6048]">
+                                    {sug.categories[0] || "Literatura"}
+                                  </span>
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSearchQuery(sug.title);
+                                  setShowSuggestions(false);
+                                  performSearch(
+                                    sug.title,
+                                    `Busca: ${sug.title}`
+                                  );
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-[#F3EDE2] hover:bg-[#2C1E16] text-[#5C4028] hover:text-[#FBF8F3] border border-[#D5C4A8] text-[11px] font-semibold transition-colors cursor-pointer"
+                              >
+                                Filtrar na estante
+                              </button>
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#2C1E16] text-[#E2B86B] text-[11px] font-bold">
+                                <BookOpen className="w-3 h-3" />
+                                Abrir Ficha
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Footer action to show all results in the grid */}
+                  <button
+                    type="submit"
+                    className="w-full px-4 py-2.5 bg-[#F3EDE2] hover:bg-[#E8DEC8] text-xs font-bold text-[#2C1E16] flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Search className="w-3.5 h-3.5 text-[#8B5E34]" />
+                    <span>
+                      Ver todos os livros individuais para &ldquo;{searchQuery.trim()}&rdquo; na estante
+                    </span>
+                  </button>
+                </div>
+              )}
             </form>
 
             {/* Quick Suggestion Pills */}
@@ -270,15 +578,31 @@ export default function ClariceAssisLibrary() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        {/* Category Wooden Shelves Navigation */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xs font-bold uppercase tracking-widest text-[#7A6048] flex items-center gap-2">
-              <Compass className="w-4 h-4 text-[#8B5E34]" />
-              Corredores da Biblioteca
-            </h2>
+        {/* Category Wooden Shelves Navigation & Sub-Topics Explorer */}
+        <div className="mb-8 bg-[#F3EDE2] border border-[#DFD2BE] rounded-2xl p-5 space-y-4 shadow-2xs">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-xs font-bold uppercase tracking-widest text-[#7A6048] flex items-center gap-2">
+                <Compass className="w-4 h-4 text-[#8B5E34]" />
+                Corredores da Biblioteca (Navegue por Gênero & Autores)
+              </h2>
+              <p className="text-xs text-[#6E5641] mt-0.5">
+                {currentCategoryObj.description}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleSurpriseDiscovery}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#2C1E16] hover:bg-[#4A3525] text-[#E2B86B] text-xs font-bold transition-all cursor-pointer shadow-xs"
+            >
+              <Shuffle className="w-3.5 h-3.5" />
+              <span>Descobrir Outros Livros</span>
+            </button>
           </div>
-          <div className="flex items-center gap-2.5 overflow-x-auto pb-2">
+
+          {/* Primary Genres Tabs */}
+          <div className="flex items-center gap-2.5 overflow-x-auto pb-1">
             {BOOK_CATEGORIES.map((cat) => {
               const isActive = activeCategory === cat.id && !showingSavedOnly;
               return (
@@ -287,10 +611,10 @@ export default function ClariceAssisLibrary() {
                   onClick={() =>
                     handleCategorySelect(cat.id, cat.query, cat.label)
                   }
-                  className={`px-4 py-2.5 rounded-xl text-sm font-medium whitespace-nowrap transition-all border cursor-pointer ${
+                  className={`px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all border cursor-pointer ${
                     isActive
                       ? "bg-[#2C1E16] text-[#FBF8F3] border-[#2C1E16] shadow-md"
-                      : "bg-[#F3EDE2] text-[#4A3525] border-[#DFD2BE] hover:bg-[#E8DEC8]"
+                      : "bg-[#FBF8F3] text-[#4A3525] border-[#DFD2BE] hover:bg-[#E8DEC8]"
                   }`}
                 >
                   {cat.label}
@@ -298,24 +622,94 @@ export default function ClariceAssisLibrary() {
               );
             })}
           </div>
+
+          {/* Sub-Topics / Authors Chips inside the selected Genre (Explore without typing!) */}
+          <div className="pt-2 border-t border-[#E2D5C1] flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-[#7A6048] mr-1">
+              Explorar nesta estante:
+            </span>
+            {currentCategoryObj.subQueries.map((sub) => {
+              const isSubActive = activeSubTopic === sub;
+              return (
+                <button
+                  key={sub}
+                  type="button"
+                  onClick={() => {
+                    setActiveSubTopic(sub);
+                    performSearch(sub, `${currentCategoryObj.label} • ${sub}`);
+                  }}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-all border cursor-pointer ${
+                    isSubActive
+                      ? "bg-[#8B5E34] text-white border-[#8B5E34] shadow-2xs"
+                      : "bg-[#FBF8F3] text-[#5C4028] border-[#D5C4A8] hover:bg-[#E8DEC8]"
+                  }`}
+                >
+                  {sub}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
-        {/* Section Title & Counter */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-6 mb-8 border-b border-[#E2D5C1]">
+        {/* Section Title + Shelf Filter Input, Sort & Language Controls */}
+        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 pb-6 mb-8 border-b border-[#E2D5C1]">
           <div>
             <h3 className="font-serif-title text-2xl sm:text-3xl font-bold text-[#2C1E16]">
-              {showingSavedOnly
-                ? "Minha Estante Pessoal"
-                : searchLabel}
+              {showingSavedOnly ? "Minha Estante Pessoal" : searchLabel}
             </h3>
             <p className="text-sm text-[#6E5641] font-serif-body mt-0.5">
               {showingSavedOnly
                 ? "Livros que você marcou para ler com calma."
-                : "Clique em qualquer livro para abrir a ficha catalográfica completa, sinopse e opções."}
+                : "Clique em qualquer livro para abrir a ficha catalográfica, baixar o PDF completo ou ver resenhas."}
             </p>
           </div>
-          <div className="text-xs font-medium text-[#7A6048] bg-[#F3EDE2] px-3.5 py-2 rounded-lg border border-[#E2D5C1] self-start sm:self-auto">
-            Exibindo <strong>{displayedBooks.length}</strong> volumes no catálogo
+
+          {/* Interactive Shelf Controls: Local Filter Input + Sort Select + PT-BR Toggle */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Instant local filter input */}
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-[#7A6048] absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={shelfFilter}
+                onChange={(e) => setShelfFilter(e.target.value)}
+                placeholder="Filtrar livros na tela..."
+                className="pl-8 pr-7 py-2 rounded-xl bg-[#F3EDE2] border border-[#D8C8B0] text-xs text-[#2C1E16] placeholder-[#8C735B] focus:outline-none focus:border-[#8B5E34] focus:bg-white w-44 sm:w-52"
+              />
+              {shelfFilter && (
+                <button
+                  type="button"
+                  onClick={() => setShelfFilter("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-[#8C735B] hover:text-[#2C1E16] cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Sort selector */}
+            <div className="flex items-center gap-1.5 bg-[#F3EDE2] px-3 py-2 rounded-xl border border-[#D8C8B0] text-xs">
+              <SlidersHorizontal className="w-3.5 h-3.5 text-[#8B5E34]" />
+              <span className="text-[#7A6048] font-medium">Ordenar:</span>
+              <select
+                value={sortBy}
+                onChange={(e) =>
+                  setSortBy(
+                    e.target.value as "relevancia" | "nota" | "ano" | "titulo"
+                  )
+                }
+                className="bg-transparent font-bold text-[#2C1E16] focus:outline-none cursor-pointer"
+              >
+                <option value="relevancia">Destaques</option>
+                <option value="nota">Maior Nota</option>
+                <option value="titulo">Ordem A-Z</option>
+                <option value="ano">Mais Recentes</option>
+              </select>
+            </div>
+
+            <div className="text-xs font-medium text-[#7A6048] bg-[#F3EDE2] px-3 py-2 rounded-xl border border-[#E2D5C1]">
+              <strong>{displayedBooks.length}</strong> obras em Português
+            </div>
           </div>
         </div>
 
@@ -484,7 +878,37 @@ export default function ClariceAssisLibrary() {
               );
             })}
           </div>
-        )}
+          )}
+
+          {/* Load More / Discover More Books Bar at Bottom of Shelf */}
+          {!isLoading && !showingSavedOnly && displayedBooks.length > 0 && (
+            <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
+              {hasMoreBooks && (
+                <button
+                  type="button"
+                  onClick={handleLoadMoreBooks}
+                  disabled={isLoadingMore}
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#2C1E16] hover:bg-[#4A3525] text-[#FBF8F3] text-xs font-bold shadow-md transition-all cursor-pointer disabled:opacity-60"
+                >
+                  <PlusCircle className="w-4 h-4 text-[#C89D54]" />
+                  <span>
+                    {isLoadingMore
+                      ? "Buscando mais obras no acervo..."
+                      : "Carregar Mais Livros nesta Estante"}
+                  </span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={handleSurpriseDiscovery}
+                className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-[#F3EDE2] hover:bg-[#E8DEC8] text-[#2C1E16] border border-[#D5C4A8] text-xs font-bold transition-all cursor-pointer"
+              >
+                <Shuffle className="w-4 h-4 text-[#8B5E34]" />
+                <span>Explorar Outros Autores & Temas</span>
+              </button>
+            </div>
+          )}
 
         {/* Roadmap Progress Banner at the Bottom */}
         <section className="mt-16 bg-[#2C1E16] text-[#FBF8F3] rounded-3xl p-8 border-2 border-[#C89D54]/50 shadow-xl">
@@ -501,26 +925,32 @@ export default function ClariceAssisLibrary() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 w-full md:w-auto">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 w-full md:w-auto">
               <div className="p-3.5 rounded-xl bg-[#36251B] border border-[#5C4028] text-xs">
                 <div className="flex items-center gap-1.5 text-[#3A5A40] bg-[#E8DEC8] px-2 py-0.5 rounded-full w-fit font-bold mb-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Fase 1 Concluída
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Fase 1
                 </div>
-                <p className="text-[#E6D7C3]">Catálogo, Busca & Edições</p>
+                <p className="text-[#E6D7C3]">Catálogo & Edições</p>
+              </div>
+              <div className="p-3.5 rounded-xl bg-[#36251B] border border-[#5C4028] text-xs">
+                <div className="flex items-center gap-1.5 text-[#3A5A40] bg-[#E8DEC8] px-2 py-0.5 rounded-full w-fit font-bold mb-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Fase 2
+                </div>
+                <p className="text-[#E6D7C3]">PDF Completo & Livrarias</p>
               </div>
               <div className="p-3.5 rounded-xl bg-[#3E2A1E] border-2 border-[#C89D54] text-xs shadow-md">
                 <div className="flex items-center gap-1.5 text-[#E2B86B] font-bold mb-1">
-                  <CheckCircle2 className="w-4 h-4" /> Fase 2 (Ativa)
+                  <CheckCircle2 className="w-4 h-4" /> Fase 3 (Ativa)
                 </div>
-                <p className="text-[#FBF8F3]">PDFs Gratuitos & Links de Compra</p>
+                <p className="text-[#FBF8F3]">Opiniões & Avaliações</p>
               </div>
               <div className="p-3.5 rounded-xl bg-[#36251B]/60 border border-[#5C4028] text-xs opacity-85">
-                <div className="font-bold text-[#C89D54] mb-1">Fase 3 (Próxima)</div>
-                <p className="text-[#CDBBA3]">Mural de Opiniões & Avaliações</p>
+                <div className="font-bold text-[#C89D54] mb-1">Fase 4 (Próxima)</div>
+                <p className="text-[#CDBBA3]">Banco de Dados & Login</p>
               </div>
               <div className="p-3.5 rounded-xl bg-[#36251B]/60 border border-[#5C4028] text-xs opacity-80">
-                <div className="font-bold text-[#C89D54] mb-1">Fase 4</div>
-                <p className="text-[#CDBBA3]">Banco de Dados & Segurança</p>
+                <div className="font-bold text-[#C89D54] mb-1">Fase 5</div>
+                <p className="text-[#CDBBA3]">Painel Admin & Alertas</p>
               </div>
             </div>
           </div>
@@ -794,28 +1224,31 @@ export default function ClariceAssisLibrary() {
                       </p>
 
                       <div className="flex flex-wrap items-center gap-3 pt-1">
-                        {/* Instant Direct PDF File Download */}
+                        {/* Instant Full-Book PDF File Download */}
                         <a
                           href={pdfInfo.directDownloadUrl}
                           download
-                          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#3A5A40] hover:bg-[#2D4732] text-white text-xs font-bold shadow-sm transition-all cursor-pointer"
+                          onClick={() => {
+                            setIsDownloadingPdf(true);
+                            setTimeout(() => setIsDownloadingPdf(false), 6000);
+                          }}
+                          className={`inline-flex items-center gap-2 px-5 py-3 rounded-xl text-white text-xs font-bold shadow-sm transition-all cursor-pointer ${
+                            isDownloadingPdf
+                              ? "bg-[#2C1E16] border border-[#C89D54]"
+                              : "bg-[#3A5A40] hover:bg-[#2D4732]"
+                          }`}
                         >
-                          <Download className="w-4 h-4" />
-                          <span>Baixar Arquivo .PDF Agora</span>
+                          <Download
+                            className={`w-4 h-4 ${
+                              isDownloadingPdf ? "animate-bounce text-[#C89D54]" : ""
+                            }`}
+                          />
+                          <span>
+                            {isDownloadingPdf
+                              ? "Preparando Livro Completo em PDF... (Aguarde o download)"
+                              : "Baixar Livro Completo em .PDF Agora"}
+                          </span>
                         </a>
-
-                        {/* Direct Official MEC PDF if available */}
-                        {pdfInfo.officialPublicPdfUrl && (
-                          <a
-                            href={pdfInfo.officialPublicPdfUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#2C1E16] hover:bg-[#4A3525] text-[#FBF8F3] text-xs font-semibold transition-all"
-                          >
-                            <FileText className="w-4 h-4 text-[#C89D54]" />
-                            <span>PDF Integral MEC (Domínio Público)</span>
-                          </a>
-                        )}
                       </div>
                     </div>
 
@@ -865,23 +1298,8 @@ export default function ClariceAssisLibrary() {
                       </div>
                     </div>
 
-                    {/* 3. Preview of Phase 3 (Reviews) */}
-                    <div className="p-4 rounded-2xl bg-[#F3EDE2]/70 border border-dashed border-[#C89D54] flex items-center justify-between gap-4">
-                      <div className="flex items-center gap-3">
-                        <MessageSquareQuote className="w-5 h-5 text-[#8B5E34] shrink-0" />
-                        <div>
-                          <h5 className="text-xs font-bold text-[#2C1E16]">
-                            Mural de Opiniões & Resenhas dos Leitores
-                          </h5>
-                          <p className="text-[11px] text-[#6E5641]">
-                            Na próxima etapa (Fase 3), os leitores poderão avaliar e publicar resenhas sobre esta obra.
-                          </p>
-                        </div>
-                      </div>
-                      <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-[#E8DEC8] text-[#5C4028] shrink-0">
-                        Fase 3
-                      </span>
-                    </div>
+                    {/* 3. PHASE 3: READER REVIEWS & OPINIONS WALL */}
+                    <BookReviewsSection book={selectedBook} />
                   </div>
                 );
               })()}
@@ -906,7 +1324,7 @@ export default function ClariceAssisLibrary() {
             <span>— Homenagem a Clarice Lispector & Machado de Assis</span>
           </div>
           <p className="text-[#9E8870]">
-            Construído passo a passo com Next.js Full-Stack • Fase 1 Concluída
+            Construído passo a passo com Next.js Full-Stack • Fase 3 Concluída
           </p>
         </div>
       </footer>

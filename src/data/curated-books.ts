@@ -4,32 +4,82 @@ export const BOOK_CATEGORIES: BookCategory[] = [
   {
     id: "acervo-clarice-assis",
     label: "Acervo Clarice & Assis",
-    query: "Machado de Assis Clarice Lispector",
-    description: "As obras imortais que batizam e inspiram nossa biblioteca."
+    query: "machado de assis",
+    subQueries: [
+      "Machado de Assis",
+      "Clarice Lispector",
+      "Jorge Amado",
+      "Graciliano Ramos",
+      "Carlos Drummond de Andrade",
+      "Guimarães Rosa",
+      "Cecília Meireles",
+      "Lima Barreto"
+    ],
+    description: "Grandes mestres da literatura brasileira e o acervo de honra da biblioteca."
   },
   {
     id: "classicos-mundiais",
     label: "Clássicos Universais",
-    query: "Dostoiévski Tolstói Jane Austen George Orwell",
-    description: "Grandes romances e obras que atravessaram os séculos."
+    query: "dostoievski",
+    subQueries: [
+      "Dostoiévski",
+      "William Shakespeare",
+      "Franz Kafka",
+      "Jane Austen",
+      "George Orwell",
+      "Liev Tolstói",
+      "Victor Hugo",
+      "Charles Dickens"
+    ],
+    description: "Romances, tragédias e obras imortais traduzidas para o português."
   },
   {
     id: "filosofia-poesia",
     label: "Filosofia & Poesia",
-    query: "Filosofia Nietzsche Sêneca Poesia Fernando Pessoa",
-    description: "Reflexões profundas sobre a alma humana, o tempo e a arte."
+    query: "filosofia",
+    subQueries: [
+      "Filosofia",
+      "Fernando Pessoa",
+      "Sêneca Estoicismo",
+      "Friedrich Nietzsche",
+      "Platão A República",
+      "Marco Aurélio Meditações",
+      "Poesia Brasileira",
+      "Albert Camus"
+    ],
+    description: "Reflexões profundas sobre a alma humana, a ética, o tempo e a arte poética."
   },
   {
     id: "fantasia-ficcao",
-    label: "Ficção & Fantasia",
-    query: "Tolkien Duna Ficção Científica Fantasia Mistério",
-    description: "Mundos imaginários, enigmas literários e narrativas envolventes."
+    label: "Ficção, Mistério & Fantasia",
+    query: "ficcao cientifica",
+    subQueries: [
+      "Ficção Científica",
+      "J.R.R. Tolkien",
+      "Agatha Christie",
+      "Arthur Conan Doyle Sherlock",
+      "Edgar Allan Poe",
+      "Isaac Asimov",
+      "Júlio Verne",
+      "Distopia"
+    ],
+    description: "Mundos imaginários, investigações detetivescas e futuros extraordinários."
   },
   {
     id: "tecnologia-ciencia",
-    label: "Ciência & Saberes",
-    query: "Carl Sagan Ciência História Psicologia Computação",
-    description: "A evolução do pensamento científico e humano."
+    label: "Ciência, História & Saberes",
+    query: "ciencia",
+    subQueries: [
+      "Ciência",
+      "História do Brasil",
+      "Psicologia",
+      "Carl Sagan",
+      "Astronomia Universo",
+      "Biografia Histórica",
+      "Sociologia",
+      "Mitologia"
+    ],
+    description: "A evolução do pensamento científico, histórico e das descobertas humanas."
   }
 ];
 
@@ -71,7 +121,6 @@ export const CURATED_BOOKS: Book[] = [
     language: "pt-BR",
     isbn: "9788563560933",
     isPublicDomain: true,
-    pdfUrl: "http://www.dominiopublico.gov.br/download/texto/bv000180.pdf",
     featuredQuote: "Olhos de ressaca? Vá, de ressaca. É o que me dá ideia daquela feição nova. Traziam não sei que fluido misterioso e enérgico, uma força que arrastava para dentro.",
     curatedBadge: "Patrono • PDF Gratuito"
   },
@@ -92,7 +141,6 @@ export const CURATED_BOOKS: Book[] = [
     language: "pt-BR",
     isbn: "9788572328319",
     isPublicDomain: true,
-    pdfUrl: "http://www.dominiopublico.gov.br/download/texto/bv000215.pdf",
     featuredQuote: "Não tive filhos, não transmiti a nenhuma criatura o legado da nossa miséria.",
     curatedBadge: "Patrono • PDF Gratuito"
   },
@@ -133,7 +181,6 @@ export const CURATED_BOOKS: Book[] = [
     language: "pt-BR",
     isbn: "9788535902778",
     isPublicDomain: true,
-    pdfUrl: "https://www.gutenberg.org/ebooks/5200",
     featuredQuote: "Quando certa manhã Gregor Samsa acordou de sonhos intranquilos, encontrou-se em sua cama metamorfoseado num inseto monstruoso.",
     curatedBadge: "Clássico Universal"
   },
@@ -174,7 +221,6 @@ export const CURATED_BOOKS: Book[] = [
     language: "pt-BR",
     isbn: "9788525406569",
     isPublicDomain: true,
-    pdfUrl: "http://www.dominiopublico.gov.br/download/texto/bv000231.pdf",
     featuredQuote: "A ciência é o meu emprego único; Itaguaí é o meu universo.",
     curatedBadge: "Patrono • PDF Gratuito"
   },
