@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import fs from "fs";
-import path from "path";
 import { BookReview, ReadingVibeTag } from "@/types/book";
-
-const DATA_DIR = path.join(process.cwd(), "src", "data");
-const REVIEWS_DB_PATH = path.join(DATA_DIR, "reviews-db.json");
+import { getDb, checkRateLimit } from "@/lib/db";
+import { getSessionUser } from "@/lib/auth";
 
 const BROWSER_HEADERS = {
   "User-Agent":
@@ -45,27 +42,47 @@ function cleanReviewHtml(html: string): string {
     .trim();
 }
 
-function readLocalSiteReviews(): BookReview[] {
+function readSqliteSiteReviews(bookKey: string): BookReview[] {
   try {
-    if (!fs.existsSync(REVIEWS_DB_PATH)) {
-      return [];
-    }
-    const raw = fs.readFileSync(REVIEWS_DB_PATH, "utf8");
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    const db = getDb();
+    const rows = db
+      .prepare(
+        `SELECT id, book_key, book_title, reader_name, reader_role, rating, vibe_tag, title, comment, likes, created_at
+         FROM reviews
+         WHERE book_key = ? OR book_key LIKE ?
+         ORDER BY rowid DESC`
+      )
+      .all(bookKey, `%${bookKey}%`) as Array<{
+      id: string;
+      book_key: string;
+      book_title: string;
+      reader_name: string;
+      reader_role: string;
+      rating: number;
+      vibe_tag: ReadingVibeTag;
+      title: string;
+      comment: string;
+      likes: number;
+      created_at: string;
+    }>;
+
+    return rows.map((r) => ({
+      id: r.id,
+      bookKey: r.book_key,
+      bookTitle: r.book_title,
+      readerName: r.reader_name,
+      readerRole: r.reader_role,
+      rating: r.rating,
+      vibeTag: r.vibe_tag,
+      title: r.title,
+      comment: r.comment,
+      likes: r.likes,
+      createdAt: r.created_at,
+      verifiedReader: true,
+      sourceStore: "Biblioteca Clarice Assis (Banco SQLite)"
+    }));
   } catch {
     return [];
-  }
-}
-
-function writeLocalSiteReviews(reviews: BookReview[]) {
-  try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-    fs.writeFileSync(REVIEWS_DB_PATH, JSON.stringify(reviews, null, 2), "utf8");
-  } catch {
-    // ignore write error
   }
 }
 
@@ -478,15 +495,7 @@ export async function GET(request: NextRequest) {
   const query = `${cleanTitle} ${cleanAuthor}`.trim();
 
   const bookKey = normalizeBookKey(cleanTitle);
-  const allSiteReviews = readLocalSiteReviews();
-
-  // Filter real reviews posted on our site for this specific book
-  const siteReviews = allSiteReviews.filter(
-    (r) =>
-      r.bookKey === bookKey ||
-      (bookKey.length > 4 &&
-        (r.bookKey.includes(bookKey) || bookKey.includes(r.bookKey)))
-  );
+  const siteReviews = readSqliteSiteReviews(bookKey);
 
   // Fetch in parallel from all 3 external store/reader platforms
   const [gplayResult, goodreadsResult, appleResult] = await Promise.all([
@@ -532,10 +541,28 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const ip =
+      request.headers.get("x-forwarded-for") ||
+      request.headers.get("x-real-ip") ||
+      "local";
+
+    const rate = checkRateLimit(`reviews:${ip}`, 10, 60_000);
+    if (!rate.allowed) {
+      return NextResponse.json(
+        {
+          error: `Limite de avaliações excedido. Aguarde ${rate.retryAfterSec}s antes de enviar outra.`
+        },
+        { status: 429 }
+      );
+    }
+
+    const sessionUser = getSessionUser(request);
     const body = await request.json();
     const bookTitle = sanitizeInput(String(body.bookTitle || ""), 120);
-    const readerName = sanitizeInput(String(body.readerName || ""), 50);
+    const readerName =
+      sessionUser?.name || sanitizeInput(String(body.readerName || ""), 50);
     const readerRole =
+      sessionUser?.literaryTitle ||
       sanitizeInput(String(body.readerRole || ""), 45) ||
       "Leitor da Biblioteca";
     const title = sanitizeInput(String(body.title || ""), 80);
@@ -568,9 +595,30 @@ export async function POST(request: NextRequest) {
       year: "numeric"
     });
 
+    const reviewId = `clarice-sql-${Date.now()}`;
+    const bookKey = normalizeBookKey(bookTitle);
+
+    const db = getDb();
+    db.prepare(
+      `INSERT INTO reviews (id, book_key, book_title, user_id, reader_name, reader_role, rating, vibe_tag, title, comment, likes, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`
+    ).run(
+      reviewId,
+      bookKey,
+      bookTitle,
+      sessionUser?.id ?? null,
+      readerName,
+      readerRole,
+      rating,
+      vibeTag,
+      title,
+      comment,
+      formattedDate
+    );
+
     const newReview: BookReview = {
-      id: `clarice-site-${Date.now()}`,
-      bookKey: normalizeBookKey(bookTitle),
+      id: reviewId,
+      bookKey,
       bookTitle,
       readerName,
       readerRole,
@@ -581,12 +629,8 @@ export async function POST(request: NextRequest) {
       createdAt: formattedDate,
       likes: 0,
       verifiedReader: true,
-      sourceStore: "Biblioteca Clarice Assis (Leitor do Site)"
+      sourceStore: "Biblioteca Clarice Assis (Banco SQLite)"
     };
-
-    const existing = readLocalSiteReviews();
-    const updated = [newReview, ...existing];
-    writeLocalSiteReviews(updated);
 
     return NextResponse.json({
       review: newReview,
@@ -594,7 +638,7 @@ export async function POST(request: NextRequest) {
     });
   } catch {
     return NextResponse.json(
-      { error: "Erro ao processar avaliação." },
+      { error: "Erro ao processar avaliação no banco de dados." },
       { status: 500 }
     );
   }

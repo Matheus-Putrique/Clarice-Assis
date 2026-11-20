@@ -20,6 +20,13 @@ import {
 
 interface BookReviewsSectionProps {
   book: Book;
+  currentUser?: {
+    id: number;
+    name: string;
+    email: string;
+    role: "reader" | "admin";
+    literaryTitle: string;
+  } | null;
 }
 
 interface StoreRatingSummary {
@@ -43,7 +50,10 @@ function sanitizeUserText(input: string, maxLength: number): string {
     .slice(0, maxLength);
 }
 
-export default function BookReviewsSection({ book }: BookReviewsSectionProps) {
+export default function BookReviewsSection({
+  book,
+  currentUser
+}: BookReviewsSectionProps) {
   const [reviews, setReviews] = useState<BookReview[]>([]);
   const [storeRatings, setStoreRatings] = useState<StoreRatingSummary[]>([]);
   const [isLoadingReviews, setIsLoadingReviews] = useState<boolean>(true);
@@ -55,9 +65,18 @@ export default function BookReviewsSection({ book }: BookReviewsSectionProps) {
   >("todas");
   const [isWriting, setIsWriting] = useState(false);
 
-  // Form states
-  const [readerName, setReaderName] = useState("");
-  const [readerRole, setReaderRole] = useState("");
+  // Form states (auto-populated when logged in!)
+  const [readerName, setReaderName] = useState(currentUser?.name || "");
+  const [readerRole, setReaderRole] = useState(
+    currentUser?.literaryTitle || ""
+  );
+
+  useEffect(() => {
+    if (currentUser) {
+      setReaderName(currentUser.name);
+      setReaderRole(currentUser.literaryTitle);
+    }
+  }, [currentUser]);
   const [rating, setRating] = useState<number>(5);
   const [hoverRating, setHoverRating] = useState<number>(0);
   const [vibeTag, setVibeTag] = useState<ReadingVibeTag>("Leitura Obrigatória");

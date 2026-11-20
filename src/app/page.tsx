@@ -5,6 +5,7 @@ import { Book, BookEdition } from "@/types/book";
 import { BOOK_CATEGORIES, CURATED_BOOKS } from "@/data/curated-books";
 import { getStoreOffers, getPdfResource } from "@/lib/book-links";
 import BookReviewsSection from "@/components/BookReviewsSection";
+import AuthModal, { SessionUser } from "@/components/AuthModal";
 import {
   Search,
   BookOpen,
@@ -19,7 +20,6 @@ import {
   Globe,
   ShoppingBag,
   Download,
-  MessageSquareQuote,
   Compass,
   Coffee,
   CheckCircle2,
@@ -29,7 +29,10 @@ import {
   ShieldCheck,
   Shuffle,
   SlidersHorizontal,
-  PlusCircle
+  PlusCircle,
+  UserCheck,
+  LogOut,
+  LogIn
 } from "lucide-react";
 
 export default function ClariceAssisLibrary() {
@@ -50,6 +53,10 @@ export default function ClariceAssisLibrary() {
   const [savedIds, setSavedIds] = useState<string[]>([]);
   const [showingSavedOnly, setShowingSavedOnly] = useState(false);
   const [searchLabel, setSearchLabel] = useState<string>("Acervo de Honra: Clarice & Assis");
+
+  // Phase 4: Authenticated SQLite Session User & Auth Modal
+  const [currentUser, setCurrentUser] = useState<SessionUser | null>(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   // Google-style live autocomplete suggestions state
   const [suggestions, setSuggestions] = useState<Book[]>([]);
@@ -138,7 +145,7 @@ export default function ClariceAssisLibrary() {
     return () => clearTimeout(timer);
   }, [searchQuery, books]);
 
-  // Load initial grouped curated books from our API on mount
+  // Load initial grouped curated books and active SQLite session + user shelf on mount
   useEffect(() => {
     fetch("/api/books")
       .then((r) => r.json())
@@ -146,20 +153,45 @@ export default function ClariceAssisLibrary() {
         if (Array.isArray(d.books)) setBooks(d.books);
       })
       .catch(() => {});
-  }, []);
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem("clarice_assis_saved");
-      if (raw) {
-        setSavedIds(JSON.parse(raw));
-      }
-    } catch {
-      // ignore storage errors
-    }
+
+    fetch("/api/auth")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.user) {
+          setCurrentUser(d.user);
+          fetch("/api/shelf")
+            .then((sr) => sr.json())
+            .then((sd) => {
+              if (Array.isArray(sd.savedIds)) {
+                setSavedIds(sd.savedIds);
+              }
+            })
+            .catch(() => {});
+        } else {
+          try {
+            const raw = localStorage.getItem("clarice_assis_saved");
+            if (raw) setSavedIds(JSON.parse(raw));
+          } catch {
+            // ignore
+          }
+        }
+      })
+      .catch(() => {});
   }, []);
 
-  const toggleSaveBook = (id: string, e?: React.MouseEvent) => {
+  const handleLogout = async () => {
+    await fetch("/api/auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "logout" })
+    });
+    setCurrentUser(null);
+  };
+
+  const toggleSaveBook = (id: string, e?: React.MouseEvent, bookObj?: Book) => {
     if (e) e.stopPropagation();
+    const targetBook = bookObj || books.find((b) => b.id === id) || selectedBook;
+
     setSavedIds((prev) => {
       const updated = prev.includes(id)
         ? prev.filter((item) => item !== id)
@@ -171,6 +203,14 @@ export default function ClariceAssisLibrary() {
       }
       return updated;
     });
+
+    if (currentUser) {
+      fetch("/api/shelf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookId: id, book: targetBook })
+      }).catch(() => {});
+    }
   };
 
   const performSearch = async (query: string, label?: string) => {
@@ -294,7 +334,7 @@ export default function ClariceAssisLibrary() {
           </div>
           <div className="flex items-center gap-4 text-[11px] uppercase tracking-wider text-[#C89D54]">
             <span className="flex items-center gap-1">
-              <Sparkles className="w-3 h-3" /> Fase 3 Ativa: Comunidade, Notas & Resenhas
+              <Sparkles className="w-3 h-3" /> Fase 4 Ativa: Banco SQLite, Login & Blindagem
             </span>
           </div>
         </div>
@@ -322,8 +362,8 @@ export default function ClariceAssisLibrary() {
             />
           </button>
 
-          {/* Saved Books Shelf Button */}
-          <div className="flex items-center gap-3">
+          {/* Saved Books Shelf Button + Reader Auth Status */}
+          <div className="flex items-center gap-2.5">
             <button
               onClick={() => setShowingSavedOnly(!showingSavedOnly)}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
@@ -333,11 +373,42 @@ export default function ClariceAssisLibrary() {
               }`}
             >
               <Bookmark className="w-4 h-4 fill-current" />
-              <span>Minha Estante</span>
+              <span className="hidden sm:inline">Minha Estante</span>
               <span className="px-1.5 py-0.5 rounded-full bg-[#2C1E16]/10 text-[11px]">
                 {savedIds.length}
               </span>
             </button>
+
+            {currentUser ? (
+              <div className="flex items-center gap-2 bg-[#2C1E16] text-[#FBF8F3] pl-3.5 pr-2 py-1.5 rounded-full border border-[#C89D54]">
+                <UserCheck className="w-3.5 h-3.5 text-[#E2B86B] shrink-0" />
+                <div className="text-left leading-tight">
+                  <p className="text-[11px] font-bold text-[#E2B86B] truncate max-w-[120px]">
+                    {currentUser.name}
+                  </p>
+                  <p className="text-[9px] text-[#D9CBB8] uppercase tracking-wider">
+                    {currentUser.role === "admin" ? "Admin • SQLite" : "Leitor • SQLite"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  title="Sair da conta"
+                  className="p-1.5 rounded-full bg-[#3E2A1E] hover:bg-red-900/80 text-[#E6D7C3] transition-colors cursor-pointer ml-1"
+                >
+                  <LogOut className="w-3 h-3" />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsAuthModalOpen(true)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-[#2C1E16] hover:bg-[#4A3525] text-[#E2B86B] text-xs font-bold border border-[#C89D54]/60 shadow-xs transition-all cursor-pointer"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span>Entrar / Criar Conta</span>
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -938,18 +1009,20 @@ export default function ClariceAssisLibrary() {
                 </div>
                 <p className="text-[#E6D7C3]">PDF Completo & Livrarias</p>
               </div>
+              <div className="p-3.5 rounded-xl bg-[#36251B] border border-[#5C4028] text-xs">
+                <div className="flex items-center gap-1.5 text-[#3A5A40] bg-[#E8DEC8] px-2 py-0.5 rounded-full w-fit font-bold mb-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Fase 3
+                </div>
+                <p className="text-[#E6D7C3]">Avaliações Multi-Lojas</p>
+              </div>
               <div className="p-3.5 rounded-xl bg-[#3E2A1E] border-2 border-[#C89D54] text-xs shadow-md">
                 <div className="flex items-center gap-1.5 text-[#E2B86B] font-bold mb-1">
-                  <CheckCircle2 className="w-4 h-4" /> Fase 3 (Ativa)
+                  <CheckCircle2 className="w-4 h-4" /> Fase 4 (Ativa)
                 </div>
-                <p className="text-[#FBF8F3]">Opiniões & Avaliações</p>
+                <p className="text-[#FBF8F3]">Banco SQLite & Login</p>
               </div>
               <div className="p-3.5 rounded-xl bg-[#36251B]/60 border border-[#5C4028] text-xs opacity-85">
-                <div className="font-bold text-[#C89D54] mb-1">Fase 4 (Próxima)</div>
-                <p className="text-[#CDBBA3]">Banco de Dados & Login</p>
-              </div>
-              <div className="p-3.5 rounded-xl bg-[#36251B]/60 border border-[#5C4028] text-xs opacity-80">
-                <div className="font-bold text-[#C89D54] mb-1">Fase 5</div>
+                <div className="font-bold text-[#C89D54] mb-1">Fase 5 (Próxima)</div>
                 <p className="text-[#CDBBA3]">Painel Admin & Alertas</p>
               </div>
             </div>
@@ -1298,8 +1371,11 @@ export default function ClariceAssisLibrary() {
                       </div>
                     </div>
 
-                    {/* 3. PHASE 3: READER REVIEWS & OPINIONS WALL */}
-                    <BookReviewsSection book={selectedBook} />
+                    {/* 3. PHASE 3 & 4: READER REVIEWS & OPINIONS WALL (SQLite + Multi-Stores) */}
+                    <BookReviewsSection
+                      book={selectedBook}
+                      currentUser={currentUser}
+                    />
                   </div>
                 );
               })()}
@@ -1307,6 +1383,23 @@ export default function ClariceAssisLibrary() {
           </div>
         </div>
       )}
+
+      {/* Phase 4: Authentication Modal (Login & Reader Card Registration) */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onSuccess={(user) => {
+          setCurrentUser(user);
+          fetch("/api/shelf")
+            .then((r) => r.json())
+            .then((d) => {
+              if (Array.isArray(d.savedIds) && d.savedIds.length > 0) {
+                setSavedIds(d.savedIds);
+              }
+            })
+            .catch(() => {});
+        }}
+      />
 
       {/* Classic Footer */}
       <footer className="bg-[#2C1E16] text-[#CDBBA3] border-t-2 border-[#4A3525] py-8 px-4 text-center text-xs">
@@ -1324,7 +1417,7 @@ export default function ClariceAssisLibrary() {
             <span>— Homenagem a Clarice Lispector & Machado de Assis</span>
           </div>
           <p className="text-[#9E8870]">
-            Construído passo a passo com Next.js Full-Stack • Fase 3 Concluída
+            Construído passo a passo com Next.js Full-Stack + SQLite • Fase 4 Concluída
           </p>
         </div>
       </footer>
