@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@source not "../../storage";
 
 :root {
   --bg-parchment: #FBF8F3;

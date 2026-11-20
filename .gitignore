@@ -40,6 +40,8 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# local sqlite database folder
+/storage/
 # local sqlite database files
 *.sqlite
 *.sqlite-shm

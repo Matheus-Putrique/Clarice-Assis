@@ -3,7 +3,9 @@ import crypto from "node:crypto";
 import path from "node:path";
 import fs from "node:fs";
 
-const DATA_DIR = path.join(process.cwd(), "src", "data");
+// Database lives OUTSIDE src/ so the Next.js/Turbopack/Tailwind file watchers never touch
+// the locked .sqlite / -shm / -wal files (which crashed the dev server on Windows).
+const DATA_DIR = path.join(process.cwd(), "storage");
 const DB_FILE_PATH = path.join(DATA_DIR, "clarice-assis.sqlite");
 
 // Singleton SQLite connection
