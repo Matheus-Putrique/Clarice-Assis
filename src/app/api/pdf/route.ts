@@ -24,9 +24,21 @@ const VERIFIED_FULL_BOOK_PDFS: Record<string, string> = {
     "https://archive.org/download/dom_casmurro_assis/dom_casmurro_assis.pdf",
   "memorias postumas de bras cubas":
     "https://archive.org/download/memoriasPostumasBrasCubas/memoriasBras.pdf",
+  "bras cubas":
+    "https://archive.org/download/memoriasPostumasBrasCubas/memoriasBras.pdf",
+  "quincas borba":
+    "https://pt.wikisource.org/api/rest_v1/page/pdf/Quincas_Borba",
+  "o cortico":
+    "https://pt.wikisource.org/api/rest_v1/page/pdf/O_Corti%C3%A7o",
+  "esau e jaco":
+    "https://pt.wikisource.org/api/rest_v1/page/pdf/Esa%C3%BA_e_Jac%C3%B3",
+  "memorial de aires":
+    "https://pt.wikisource.org/api/rest_v1/page/pdf/Memorial_de_Aires",
   "a paixao segundo g":
     "https://archive.org/download/paixao-segundo-gh-lispector-clarice-z-library/Paix%C3%A3o%20segundo%20gh%20(Lispector%20Clarice)%20(Z-Library).pdf",
   "a metamorfose":
+    "https://archive.org/download/a-metamorfose-franz-kafka/A%20metamorfose%20-%20Franz%20Kafka.pdf",
+  "the metamorphosis":
     "https://archive.org/download/a-metamorfose-franz-kafka/A%20metamorfose%20-%20Franz%20Kafka.pdf",
   "noites brancas":
     "https://archive.org/download/noites-brancas-fiodor-dostoievski-we-lib.org/Noites%20Brancas%20--%20Fi%C3%B3dor%20Dostoi%C3%A9vski%20--%20(%20WeLib.org%20).pdf",

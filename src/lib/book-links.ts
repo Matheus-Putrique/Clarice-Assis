@@ -122,8 +122,8 @@ export function getPdfResource(
     available: true,
     directDownloadUrl,
     estimatedPages,
-    statusLabel: `Livro Completo em PDF (~${estimatedPages} págs.) • Download Direto`,
+    statusLabel: `Edição em PDF (~${estimatedPages} págs.) • Acervo Aberto & Domínio Público`,
     legalNote:
-      "Clique no botão abaixo para baixar o arquivo .PDF da obra completa (com todas as páginas) diretamente para o seu computador, sem redirecionar para sites externos."
+      "A Biblioteca Clarice Assis disponibiliza downloads integrais de obras em domínio público aberto ou de livre circulação. Caso a obra possua direitos autorais vigentes, adquira o exemplar através das livrarias parceiras abaixo."
   };
 }

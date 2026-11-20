@@ -210,7 +210,7 @@ export default function AuthModal({
 
           <div>
             <label className="block text-xs font-bold text-[#4A3525] mb-1">
-              Senha Segura (mín. 6 caracteres) *
+              Senha *
             </label>
             <div className="relative">
               <KeyRound className="w-4 h-4 text-[#7A6048] absolute left-3.5 top-1/2 -translate-y-1/2" />

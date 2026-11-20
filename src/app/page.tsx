@@ -32,7 +32,8 @@ import {
   PlusCircle,
   UserCheck,
   LogOut,
-  LogIn
+  LogIn,
+  AlertTriangle
 } from "lucide-react";
 
 export default function ClariceAssisLibrary() {
@@ -50,6 +51,11 @@ export default function ClariceAssisLibrary() {
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [activeEdition, setActiveEdition] = useState<BookEdition | null>(null);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const [pdfNotice, setPdfNotice] = useState<{
+    type: "success" | "unavailable";
+    title: string;
+    message: string;
+  } | null>(null);
   const [savedIds, setSavedIds] = useState<string[]>([]);
   const [showingSavedOnly, setShowingSavedOnly] = useState(false);
   const [searchLabel, setSearchLabel] = useState<string>("Acervo de Honra: Clarice & Assis");
@@ -69,7 +75,73 @@ export default function ClariceAssisLibrary() {
     setSelectedBook(book);
     setActiveEdition(book.editions && book.editions.length > 0 ? book.editions[0] : null);
     setIsDownloadingPdf(false);
+    setPdfNotice(null);
     setShowSuggestions(false);
+  };
+
+  const handleDownloadPdf = async (downloadUrl: string, bookTitle: string) => {
+    setIsDownloadingPdf(true);
+    setPdfNotice(null);
+
+    try {
+      const res = await fetch(downloadUrl);
+      const contentType = res.headers.get("content-type") || "";
+
+      if (!res.ok || !contentType.includes("application/pdf")) {
+        let errorMsg = `O arquivo PDF completo de "${bookTitle}" não está disponível em domínio público aberto ou possui direitos autorais vigentes.`;
+        try {
+          const errData = await res.json();
+          if (errData?.error) errorMsg = errData.error;
+        } catch {
+          // ignore
+        }
+
+        setPdfNotice({
+          type: "unavailable",
+          title: bookTitle,
+          message: errorMsg
+        });
+        return;
+      }
+
+      const blob = await res.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const tempLink = document.createElement("a");
+      tempLink.href = blobUrl;
+
+      let filename = `${bookTitle
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")}-livro-completo.pdf`;
+      const disposition = res.headers.get("content-disposition");
+      if (disposition && disposition.includes("filename=")) {
+        const match = disposition.match(/filename="?([^";]+)"?/);
+        if (match?.[1]) filename = match[1];
+      }
+
+      tempLink.download = filename;
+      document.body.appendChild(tempLink);
+      tempLink.click();
+      document.body.removeChild(tempLink);
+      window.URL.revokeObjectURL(blobUrl);
+
+      setPdfNotice({
+        type: "success",
+        title: bookTitle,
+        message: `O download do arquivo integral "${filename}" foi iniciado com sucesso!`
+      });
+      setTimeout(() => {
+        setPdfNotice((prev) => (prev?.type === "success" ? null : prev));
+      }, 6000);
+    } catch {
+      setPdfNotice({
+        type: "unavailable",
+        title: bookTitle,
+        message:
+          "Houve uma instabilidade momentânea na conexão ao obter o arquivo PDF. Verifique sua rede e tente novamente."
+      });
+    } finally {
+      setIsDownloadingPdf(false);
+    }
   };
 
   // Close autocomplete dropdown when clicking outside
@@ -1296,32 +1368,70 @@ export default function ClariceAssisLibrary() {
                         {pdfInfo.legalNote}
                       </p>
 
-                      <div className="flex flex-wrap items-center gap-3 pt-1">
-                        {/* Instant Full-Book PDF File Download */}
-                        <a
-                          href={pdfInfo.directDownloadUrl}
-                          download
-                          onClick={() => {
-                            setIsDownloadingPdf(true);
-                            setTimeout(() => setIsDownloadingPdf(false), 6000);
-                          }}
-                          className={`inline-flex items-center gap-2 px-5 py-3 rounded-xl text-white text-xs font-bold shadow-sm transition-all cursor-pointer ${
-                            isDownloadingPdf
-                              ? "bg-[#2C1E16] border border-[#C89D54]"
-                              : "bg-[#3A5A40] hover:bg-[#2D4732]"
-                          }`}
-                        >
-                          <Download
-                            className={`w-4 h-4 ${
-                              isDownloadingPdf ? "animate-bounce text-[#C89D54]" : ""
+                      <div className="space-y-3 pt-1">
+                        {/* Instant Full-Book PDF File Download Handler */}
+                        <div className="flex flex-wrap items-center gap-3">
+                          <button
+                            type="button"
+                            disabled={isDownloadingPdf}
+                            onClick={() =>
+                              handleDownloadPdf(
+                                pdfInfo.directDownloadUrl,
+                                activeEdition?.title || selectedBook.title
+                              )
+                            }
+                            className={`inline-flex items-center gap-2 px-5 py-3 rounded-xl text-white text-xs font-bold shadow-sm transition-all cursor-pointer disabled:opacity-75 ${
+                              isDownloadingPdf
+                                ? "bg-[#2C1E16] border border-[#C89D54]"
+                                : "bg-[#3A5A40] hover:bg-[#2D4732]"
                             }`}
-                          />
-                          <span>
-                            {isDownloadingPdf
-                              ? "Preparando Livro Completo em PDF... (Aguarde o download)"
-                              : "Baixar Livro Completo em .PDF Agora"}
-                          </span>
-                        </a>
+                          >
+                            <Download
+                              className={`w-4 h-4 ${
+                                isDownloadingPdf
+                                  ? "animate-bounce text-[#C89D54]"
+                                  : ""
+                              }`}
+                            />
+                            <span>
+                              {isDownloadingPdf
+                                ? "Verificando & Baixando Livro Completo em PDF..."
+                                : "Baixar Livro Completo em .PDF Agora"}
+                            </span>
+                          </button>
+                        </div>
+
+                        {/* Interactive Notification for PDF Download Results */}
+                        {pdfNotice && (
+                          <div
+                            className={`p-4 rounded-2xl border text-xs leading-relaxed animate-in fade-in duration-200 ${
+                              pdfNotice.type === "success"
+                                ? "bg-[#3A5A40]/10 border-[#3A5A40] text-[#1D3122]"
+                                : "bg-[#7A2E1E]/10 border-[#8B3A2B] text-[#541E15]"
+                            }`}
+                          >
+                            <div className="flex items-start gap-2.5">
+                              {pdfNotice.type === "success" ? (
+                                <CheckCircle2 className="w-4 h-4 text-[#3A5A40] shrink-0 mt-0.5" />
+                              ) : (
+                                <AlertTriangle className="w-4 h-4 text-[#8B3A2B] shrink-0 mt-0.5" />
+                              )}
+                              <div className="space-y-1">
+                                <p className="font-bold">
+                                  {pdfNotice.type === "success"
+                                    ? "Download Realizado com Sucesso!"
+                                    : "Edição Integral em Domínio Público Indisponível"}
+                                </p>
+                                <p>{pdfNotice.message}</p>
+                                {pdfNotice.type === "unavailable" && (
+                                  <p className="text-[11px] opacity-90 pt-1 font-semibold">
+                                    Dica: Você pode adquirir exemplares desta obra com segurança nas livrarias parceiras listadas logo abaixo.
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
 
