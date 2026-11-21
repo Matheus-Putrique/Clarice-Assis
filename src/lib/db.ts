@@ -121,25 +121,44 @@ export function getDb(): DatabaseSync {
     );
   `);
 
-  // Seed default Admin account if no admin exists yet
-  const existingAdmin = db
-    .prepare("SELECT id FROM users WHERE email = ?")
-    .get("admin@clariceassis.com.br");
+  // Sync private Admin account strictly from environment variables (.env.local)
+  // Never hardcode admin email or password in source code.
+  const envAdminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+  const envAdminPassword = process.env.ADMIN_PASSWORD?.trim();
+  const envAdminName =
+    process.env.ADMIN_NAME?.trim() || "Bibliotecário Chefe";
 
-  if (!existingAdmin) {
-    const { hash, salt } = hashPassword("clarice123");
+  if (envAdminEmail && envAdminPassword) {
+    // Remove any legacy demo admin account that doesn't match the private env email
     db.prepare(
-      `INSERT INTO users (name, email, password_hash, password_salt, role, literary_title, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      "Bibliotecário Chefe (Admin)",
-      "admin@clariceassis.com.br",
-      hash,
-      salt,
-      "admin",
-      "Curador & Administrador do Acervo",
-      new Date().toISOString()
-    );
+      "DELETE FROM users WHERE role = 'admin' AND LOWER(email) != ?"
+    ).run(envAdminEmail);
+
+    const existingAdmin = db
+      .prepare("SELECT id FROM users WHERE LOWER(email) = ?")
+      .get(envAdminEmail) as { id: number } | undefined;
+
+    const { hash, salt } = hashPassword(envAdminPassword);
+
+    if (!existingAdmin) {
+      db.prepare(
+        `INSERT INTO users (name, email, password_hash, password_salt, role, literary_title, created_at)
+         VALUES (?, ?, ?, ?, 'admin', ?, ?)`
+      ).run(
+        envAdminName,
+        envAdminEmail,
+        hash,
+        salt,
+        "Curador & Administrador do Acervo",
+        new Date().toISOString()
+      );
+    } else {
+      db.prepare(
+        `UPDATE users
+         SET name = ?, password_hash = ?, password_salt = ?, role = 'admin'
+         WHERE id = ?`
+      ).run(envAdminName, hash, salt, existingAdmin.id);
+    }
   }
 
   dbInstance = db;

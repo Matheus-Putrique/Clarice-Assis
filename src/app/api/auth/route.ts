@@ -7,6 +7,7 @@ import {
   checkRateLimit
 } from "@/lib/db";
 import { getSessionUser, SESSION_COOKIE_NAME } from "@/lib/auth";
+import { sendWelcomeEmail } from "@/lib/mailer";
 
 function sanitizeField(input: unknown, maxLen: number): string {
   return String(input || "")
@@ -121,7 +122,18 @@ export async function POST(request: NextRequest) {
         literaryTitle
       };
 
-      const res = NextResponse.json({ user, success: true });
+      // Dispatch automatic Welcome Email from Biblioteca Clarice Assis
+      const welcomeEmail = await sendWelcomeEmail({
+        toName: name,
+        toEmail: email,
+        literaryTitle
+      });
+
+      const res = NextResponse.json({
+        user,
+        welcomeEmail,
+        success: true
+      });
       res.cookies.set(SESSION_COOKIE_NAME, token, {
         httpOnly: true,
         sameSite: "lax",

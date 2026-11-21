@@ -22,10 +22,16 @@ export interface SessionUser {
   literaryTitle: string;
 }
 
+export interface WelcomeEmailInfo {
+  sent: boolean;
+  mode: "smtp" | "ethereal_smtp" | "local_outbox";
+  previewUrl?: string | null;
+}
+
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: (user: SessionUser) => void;
+  onSuccess: (user: SessionUser, welcomeEmail?: WelcomeEmailInfo | null) => void;
 }
 
 export default function AuthModal({
@@ -69,7 +75,7 @@ export default function AuthModal({
         return;
       }
 
-      onSuccess(data.user);
+      onSuccess(data.user, data.welcomeEmail || null);
       onClose();
     } catch {
       setErrorMsg("Erro de comunicação com o servidor.");
@@ -245,21 +251,9 @@ export default function AuthModal({
           <div className="pt-2 border-t border-[#E2D5C1] flex items-center justify-between text-[11px] text-[#7A6048]">
             <span className="flex items-center gap-1">
               <ShieldCheck className="w-3.5 h-3.5 text-[#3A5A40]" />
-              PBKDF2-SHA512 + SQLite WAL
+              Criptografia PBKDF2-SHA512 • Sessão Segura
             </span>
-            {mode === "login" && (
-              <button
-                type="button"
-                onClick={() => {
-                  setEmail("admin@clariceassis.com.br");
-                  setPassword("clarice123");
-                }}
-                className="text-[#8B5E34] font-semibold hover:underline cursor-pointer"
-                title="Preenche credenciais de demonstração do Bibliotecário Admin"
-              >
-                Usar conta Admin Demo
-              </button>
-            )}
+            <span>Biblioteca Clarice Assis</span>
           </div>
         </form>
       </div>

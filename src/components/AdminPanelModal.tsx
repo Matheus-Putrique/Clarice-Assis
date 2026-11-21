@@ -905,20 +905,18 @@ export default function AdminPanelModal({
                     </p>
                   </div>
 
-                  {u.email !== "admin@clariceassis.com.br" && (
-                    <button
-                      type="button"
-                      onClick={() => handleToggleUserRole(u.id)}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#2C1E16] hover:bg-[#4A3525] text-[#E2B86B] text-xs font-bold cursor-pointer shrink-0"
-                    >
-                      <UserCheck className="w-3.5 h-3.5" />
-                      <span>
-                        {u.role === "admin"
-                          ? "Tornar Leitor Comum"
-                          : "Promover a Admin"}
-                      </span>
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleToggleUserRole(u.id)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#2C1E16] hover:bg-[#4A3525] text-[#E2B86B] text-xs font-bold cursor-pointer shrink-0"
+                  >
+                    <UserCheck className="w-3.5 h-3.5" />
+                    <span>
+                      {u.role === "admin"
+                        ? "Tornar Leitor Comum"
+                        : "Promover a Admin"}
+                    </span>
+                  </button>
                 </div>
               ))}
             </div>

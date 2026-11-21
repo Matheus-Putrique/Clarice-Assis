@@ -328,11 +328,17 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      if (targetUser.email === "admin@clariceassis.com.br") {
+      const envAdminEmail = (process.env.ADMIN_EMAIL || "")
+        .trim()
+        .toLowerCase();
+      if (
+        targetUser.id === sessionUser.id ||
+        (envAdminEmail && targetUser.email.toLowerCase() === envAdminEmail)
+      ) {
         return NextResponse.json(
           {
             error:
-              "A conta principal do Bibliotecário Chefe não pode ser rebaixada."
+              "A conta principal do Bibliotecário Chefe ou a sessão ativa não pode ser rebaixada."
           },
           { status: 400 }
         );

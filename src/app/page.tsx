@@ -5,7 +5,7 @@ import { Book, BookEdition } from "@/types/book";
 import { BOOK_CATEGORIES, CURATED_BOOKS } from "@/data/curated-books";
 import { getStoreOffers, getPdfResource } from "@/lib/book-links";
 import BookReviewsSection from "@/components/BookReviewsSection";
-import AuthModal, { SessionUser } from "@/components/AuthModal";
+import AuthModal, { SessionUser, WelcomeEmailInfo } from "@/components/AuthModal";
 import AdminPanelModal from "@/components/AdminPanelModal";
 import {
   Search,
@@ -74,6 +74,11 @@ export default function ClariceAssisLibrary() {
     author: string;
   } | null>(null);
   const [isReportingPdfIssue, setIsReportingPdfIssue] = useState(false);
+  const [welcomeEmailToast, setWelcomeEmailToast] = useState<{
+    name: string;
+    email: string;
+    previewUrl?: string | null;
+  } | null>(null);
 
   // Google-style live autocomplete suggestions state
   const [suggestions, setSuggestions] = useState<Book[]>([]);
@@ -595,6 +600,41 @@ export default function ClariceAssisLibrary() {
           </div>
         </div>
       </header>
+
+      {/* Welcome Email Dispatched Banner */}
+      {welcomeEmailToast && (
+        <div className="bg-[#3A5A40] text-white px-4 py-3 border-b border-[#C89D54] shadow-md">
+          <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2.5">
+              <CheckCircle2 className="w-4 h-4 text-[#E2B86B] shrink-0" />
+              <span>
+                <strong>Carteira de Leitor Emitida!</strong> A Biblioteca Clarice Assis enviou um e-mail oficial de boas-vindas para{" "}
+                <strong className="underline">{welcomeEmailToast.email}</strong>.
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              {welcomeEmailToast.previewUrl && (
+                <a
+                  href={welcomeEmailToast.previewUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-[#2C1E16] text-[#E2B86B] font-bold hover:bg-[#4A3525] transition-colors"
+                >
+                  <span>Visualizar E-mail Enviado</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
+              <button
+                type="button"
+                onClick={() => setWelcomeEmailToast(null)}
+                className="text-white/80 hover:text-white font-bold cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Cozy Classic Hero Section */}
       <section className="relative bg-gradient-to-b from-[#2C1E16] via-[#36251B] to-[#261912] text-[#FBF8F3] border-b-4 border-[#C89D54]">
@@ -1651,8 +1691,15 @@ export default function ClariceAssisLibrary() {
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
-        onSuccess={(user) => {
+        onSuccess={(user, welcomeEmail: WelcomeEmailInfo | null | undefined) => {
           setCurrentUser(user);
+          if (welcomeEmail?.sent) {
+            setWelcomeEmailToast({
+              name: user.name,
+              email: user.email,
+              previewUrl: welcomeEmail.previewUrl
+            });
+          }
           fetch("/api/shelf")
             .then((r) => r.json())
             .then((d) => {
