@@ -6,6 +6,7 @@ import { BOOK_CATEGORIES, CURATED_BOOKS } from "@/data/curated-books";
 import { getStoreOffers, getPdfResource } from "@/lib/book-links";
 import BookReviewsSection from "@/components/BookReviewsSection";
 import AuthModal, { SessionUser } from "@/components/AuthModal";
+import AdminPanelModal from "@/components/AdminPanelModal";
 import {
   Search,
   BookOpen,
@@ -33,7 +34,10 @@ import {
   UserCheck,
   LogOut,
   LogIn,
-  AlertTriangle
+  AlertTriangle,
+  Wrench,
+  Flag,
+  ShieldAlert
 } from "lucide-react";
 
 export default function ClariceAssisLibrary() {
@@ -60,9 +64,16 @@ export default function ClariceAssisLibrary() {
   const [showingSavedOnly, setShowingSavedOnly] = useState(false);
   const [searchLabel, setSearchLabel] = useState<string>("Acervo de Honra: Clarice & Assis");
 
-  // Phase 4: Authenticated SQLite Session User & Auth Modal
+  // Phase 4 & 5: Authenticated SQLite Session User, Auth Modal & Admin Panel
   const [currentUser, setCurrentUser] = useState<SessionUser | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+  const [pendingPdfIssuesCount, setPendingPdfIssuesCount] = useState<number>(0);
+  const [adminBookToFix, setAdminBookToFix] = useState<{
+    title: string;
+    author: string;
+  } | null>(null);
+  const [isReportingPdfIssue, setIsReportingPdfIssue] = useState(false);
 
   // Google-style live autocomplete suggestions state
   const [suggestions, setSuggestions] = useState<Book[]>([]);
@@ -70,6 +81,27 @@ export default function ClariceAssisLibrary() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
   const searchContainerRef = useRef<HTMLFormElement | null>(null);
+
+  const refreshAdminIssuesCount = async () => {
+    try {
+      const res = await fetch("/api/admin");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data?.stats && typeof data.stats.pendingIssues === "number") {
+        setPendingPdfIssuesCount(data.stats.pendingIssues);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    if (currentUser?.role === "admin") {
+      refreshAdminIssuesCount();
+    } else {
+      setPendingPdfIssuesCount(0);
+    }
+  }, [currentUser]);
 
   const openBookModal = (book: Book) => {
     setSelectedBook(book);
@@ -79,7 +111,15 @@ export default function ClariceAssisLibrary() {
     setShowSuggestions(false);
   };
 
-  const handleDownloadPdf = async (downloadUrl: string, bookTitle: string) => {
+  /**
+   * Phase 5: Safe PDF Downloader.
+   * If the PDF fails or is unavailable, returns null, shows a clean alert to the user,
+   * and automatically notifies the Admin in the SQLite maintenance queue.
+   */
+  const handleDownloadPdf = async (
+    downloadUrl: string,
+    bookTitle: string
+  ): Promise<string | null> => {
     setIsDownloadingPdf(true);
     setPdfNotice(null);
 
@@ -88,7 +128,7 @@ export default function ClariceAssisLibrary() {
       const contentType = res.headers.get("content-type") || "";
 
       if (!res.ok || !contentType.includes("application/pdf")) {
-        let errorMsg = `O arquivo PDF completo de "${bookTitle}" não está disponível em domínio público aberto ou possui direitos autorais vigentes.`;
+        let errorMsg = `Este PDF ("${bookTitle}") está apresentando algum problema ou indisponibilidade no acervo. O Administrador já foi notificado automaticamente para que uma correção seja feita!`;
         try {
           const errData = await res.json();
           if (errData?.error) errorMsg = errData.error;
@@ -101,7 +141,11 @@ export default function ClariceAssisLibrary() {
           title: bookTitle,
           message: errorMsg
         });
-        return;
+
+        if (currentUser?.role === "admin") {
+          refreshAdminIssuesCount();
+        }
+        return null;
       }
 
       const blob = await res.blob();
@@ -132,15 +176,56 @@ export default function ClariceAssisLibrary() {
       setTimeout(() => {
         setPdfNotice((prev) => (prev?.type === "success" ? null : prev));
       }, 6000);
+      return filename;
     } catch {
       setPdfNotice({
         type: "unavailable",
         title: bookTitle,
         message:
-          "Houve uma instabilidade momentânea na conexão ao obter o arquivo PDF. Verifique sua rede e tente novamente."
+          "Este PDF apresentou erro de leitura/transferência. Retornado nulo e o Administrador foi notificado para verificação."
       });
+      return null;
     } finally {
       setIsDownloadingPdf(false);
+    }
+  };
+
+  /**
+   * Phase 5: Manual User Report button to notify the Admin about any PDF defect
+   */
+  const handleReportPdfIssue = async (bookTitle: string, bookAuthor: string) => {
+    setIsReportingPdfIssue(true);
+    try {
+      const res = await fetch("/api/admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "report_pdf_issue",
+          bookTitle,
+          bookAuthor,
+          errorDetails:
+            "Alerta enviado pelo leitor na ficha do livro: solicitação de revisão/reparo do arquivo PDF."
+        })
+      });
+      const data = await res.json();
+      setPdfNotice({
+        type: "unavailable",
+        title: bookTitle,
+        message:
+          data?.message ||
+          `O problema no PDF de "${bookTitle}" foi reportado! O Administrador foi notificado no Painel de Manutenção.`
+      });
+      if (currentUser?.role === "admin") {
+        refreshAdminIssuesCount();
+      }
+    } catch {
+      setPdfNotice({
+        type: "unavailable",
+        title: bookTitle,
+        message: "Erro ao comunicar chamado ao Administrador."
+      });
+    } finally {
+      setIsReportingPdfIssue(false);
     }
   };
 
@@ -406,7 +491,7 @@ export default function ClariceAssisLibrary() {
           </div>
           <div className="flex items-center gap-4 text-[11px] uppercase tracking-wider text-[#C89D54]">
             <span className="flex items-center gap-1">
-              <Sparkles className="w-3 h-3" /> Fase 4 Ativa: Banco SQLite, Login & Blindagem
+              <Sparkles className="w-3 h-3" /> Fase 5 Ativa: Divisão Usuário vs. Admin & Alertas de PDF
             </span>
           </div>
         </div>
@@ -434,7 +519,7 @@ export default function ClariceAssisLibrary() {
             />
           </button>
 
-          {/* Saved Books Shelf Button + Reader Auth Status */}
+          {/* Saved Books Shelf Button + Admin Panel Button + Reader Auth Status */}
           <div className="flex items-center gap-2.5">
             <button
               onClick={() => setShowingSavedOnly(!showingSavedOnly)}
@@ -451,6 +536,30 @@ export default function ClariceAssisLibrary() {
               </span>
             </button>
 
+            {currentUser?.role === "admin" && (
+              <button
+                type="button"
+                onClick={() => {
+                  setAdminBookToFix(null);
+                  setIsAdminModalOpen(true);
+                }}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-[#8B3A2B] hover:bg-[#6E2C20] text-[#FBF8F3] text-xs font-bold border border-[#C89D54] shadow-sm transition-all cursor-pointer"
+                title="Abrir Painel do Bibliotecário Chefe (Alertas de PDF, Moderação e Usuários)"
+              >
+                <Wrench className="w-3.5 h-3.5 text-[#E2B86B]" />
+                <span>Painel Admin</span>
+                <span
+                  className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                    pendingPdfIssuesCount > 0
+                      ? "bg-[#E2B86B] text-[#2C1E16] animate-pulse"
+                      : "bg-black/25 text-[#E6D7C3]"
+                  }`}
+                >
+                  {pendingPdfIssuesCount}
+                </span>
+              </button>
+            )}
+
             {currentUser ? (
               <div className="flex items-center gap-2 bg-[#2C1E16] text-[#FBF8F3] pl-3.5 pr-2 py-1.5 rounded-full border border-[#C89D54]">
                 <UserCheck className="w-3.5 h-3.5 text-[#E2B86B] shrink-0" />
@@ -459,7 +568,9 @@ export default function ClariceAssisLibrary() {
                     {currentUser.name}
                   </p>
                   <p className="text-[9px] text-[#D9CBB8] uppercase tracking-wider">
-                    {currentUser.role === "admin" ? "Admin • SQLite" : "Leitor • SQLite"}
+                    {currentUser.role === "admin"
+                      ? "Visão: Admin"
+                      : "Visão: Leitor"}
                   </p>
                 </div>
                 <button
@@ -1087,15 +1198,17 @@ export default function ClariceAssisLibrary() {
                 </div>
                 <p className="text-[#E6D7C3]">Avaliações Multi-Lojas</p>
               </div>
+              <div className="p-3.5 rounded-xl bg-[#36251B] border border-[#5C4028] text-xs">
+                <div className="flex items-center gap-1.5 text-[#3A5A40] bg-[#E8DEC8] px-2 py-0.5 rounded-full w-fit font-bold mb-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Fase 4
+                </div>
+                <p className="text-[#E6D7C3]">Banco SQLite & Login</p>
+              </div>
               <div className="p-3.5 rounded-xl bg-[#3E2A1E] border-2 border-[#C89D54] text-xs shadow-md">
                 <div className="flex items-center gap-1.5 text-[#E2B86B] font-bold mb-1">
-                  <CheckCircle2 className="w-4 h-4" /> Fase 4 (Ativa)
+                  <CheckCircle2 className="w-4 h-4" /> Fase 5 (Ativa)
                 </div>
-                <p className="text-[#FBF8F3]">Banco SQLite & Login</p>
-              </div>
-              <div className="p-3.5 rounded-xl bg-[#36251B]/60 border border-[#5C4028] text-xs opacity-85">
-                <div className="font-bold text-[#C89D54] mb-1">Fase 5 (Próxima)</div>
-                <p className="text-[#CDBBA3]">Painel Admin & Alertas</p>
+                <p className="text-[#FBF8F3]">Painel Admin & Alertas</p>
               </div>
             </div>
           </div>
@@ -1369,8 +1482,8 @@ export default function ClariceAssisLibrary() {
                       </p>
 
                       <div className="space-y-3 pt-1">
-                        {/* Instant Full-Book PDF File Download Handler */}
-                        <div className="flex flex-wrap items-center gap-3">
+                        {/* Instant Full-Book PDF File Download Handler + Phase 5 Report/Admin Actions */}
+                        <div className="flex flex-wrap items-center gap-2.5">
                           <button
                             type="button"
                             disabled={isDownloadingPdf}
@@ -1399,9 +1512,49 @@ export default function ClariceAssisLibrary() {
                                 : "Baixar Livro Completo em .PDF Agora"}
                             </span>
                           </button>
+
+                          <button
+                            type="button"
+                            disabled={isReportingPdfIssue}
+                            onClick={() =>
+                              handleReportPdfIssue(
+                                activeEdition?.title || selectedBook.title,
+                                (activeEdition?.authors || selectedBook.authors).join(", ")
+                              )
+                            }
+                            className="inline-flex items-center gap-1.5 px-3.5 py-3 rounded-xl bg-[#F3EDE2] hover:bg-[#E8DEC8] text-[#5C4028] border border-[#D5C4A8] text-xs font-semibold transition-all cursor-pointer disabled:opacity-60"
+                            title="Notificar o Administrador caso este PDF apresente erro ou precise de manutenção"
+                          >
+                            <Flag className="w-3.5 h-3.5 text-[#8B3A2B]" />
+                            <span>
+                              {isReportingPdfIssue
+                                ? "Notificando Admin..."
+                                : "Reportar Problema no PDF"}
+                            </span>
+                          </button>
+
+                          {currentUser?.role === "admin" && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAdminBookToFix({
+                                  title: activeEdition?.title || selectedBook.title,
+                                  author: (
+                                    activeEdition?.authors || selectedBook.authors
+                                  ).join(", ")
+                                });
+                                setIsAdminModalOpen(true);
+                              }}
+                              className="inline-flex items-center gap-1.5 px-3.5 py-3 rounded-xl bg-[#2C1E16] hover:bg-[#4A3525] text-[#E2B86B] border border-[#C89D54] text-xs font-bold transition-all cursor-pointer"
+                              title="Ação Exclusiva Admin: Vincular ou enviar arquivo PDF corrigido para esta obra"
+                            >
+                              <Wrench className="w-3.5 h-3.5" />
+                              <span>Corrigir PDF (Admin)</span>
+                            </button>
+                          )}
                         </div>
 
-                        {/* Interactive Notification for PDF Download Results */}
+                        {/* Interactive Notification for PDF Download Results (Phase 5 Null Return & Admin Alert) */}
                         {pdfNotice && (
                           <div
                             className={`p-4 rounded-2xl border text-xs leading-relaxed animate-in fade-in duration-200 ${
@@ -1414,18 +1567,18 @@ export default function ClariceAssisLibrary() {
                               {pdfNotice.type === "success" ? (
                                 <CheckCircle2 className="w-4 h-4 text-[#3A5A40] shrink-0 mt-0.5" />
                               ) : (
-                                <AlertTriangle className="w-4 h-4 text-[#8B3A2B] shrink-0 mt-0.5" />
+                                <ShieldAlert className="w-4 h-4 text-[#8B3A2B] shrink-0 mt-0.5" />
                               )}
                               <div className="space-y-1">
                                 <p className="font-bold">
                                   {pdfNotice.type === "success"
                                     ? "Download Realizado com Sucesso!"
-                                    : "Edição Integral em Domínio Público Indisponível"}
+                                    : "Alerta de Manutenção do PDF (Retorno Nulo • Admin Notificado)"}
                                 </p>
                                 <p>{pdfNotice.message}</p>
                                 {pdfNotice.type === "unavailable" && (
                                   <p className="text-[11px] opacity-90 pt-1 font-semibold">
-                                    Dica: Você pode adquirir exemplares desta obra com segurança nas livrarias parceiras listadas logo abaixo.
+                                    O chamado já se encontra na fila do Painel do Administrador para reparo. Enquanto isso, você também pode consultar as livrarias parceiras abaixo.
                                   </p>
                                 )}
                               </div>
@@ -1511,6 +1664,17 @@ export default function ClariceAssisLibrary() {
         }}
       />
 
+      {/* Phase 5: Admin Panel Modal (PDF Issues Queue, Custom PDFs, Review Moderation, Users) */}
+      <AdminPanelModal
+        isOpen={isAdminModalOpen}
+        onClose={() => {
+          setIsAdminModalOpen(false);
+          setAdminBookToFix(null);
+        }}
+        onStatsUpdated={(pendingCount) => setPendingPdfIssuesCount(pendingCount)}
+        initialBookToFix={adminBookToFix}
+      />
+
       {/* Classic Footer */}
       <footer className="bg-[#2C1E16] text-[#CDBBA3] border-t-2 border-[#4A3525] py-8 px-4 text-center text-xs">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -1527,7 +1691,7 @@ export default function ClariceAssisLibrary() {
             <span>— Homenagem a Clarice Lispector & Machado de Assis</span>
           </div>
           <p className="text-[#9E8870]">
-            Construído passo a passo com Next.js Full-Stack + SQLite • Fase 4 Concluída
+            Construído passo a passo com Next.js Full-Stack + SQLite • Fase 5 Concluída (Sistema Completo)
           </p>
         </div>
       </footer>

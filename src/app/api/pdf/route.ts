@@ -1,4 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import fs from "node:fs";
+import path from "node:path";
+import { getCustomPdfUrl, reportPdfIssue } from "@/lib/db";
+import { getSessionUser } from "@/lib/auth";
 
 /**
  * Verified 100% public, unrestricted (HTTP 200) full-book PDF files
@@ -207,12 +211,43 @@ export async function GET(request: NextRequest) {
   const normTitle = normalizeKey(title);
   const filename = makeSafeFilename(title);
 
-  // 1. Check verified 100% open full-book PDF catalog
-  let targetPdfUrl: string | null = null;
-  for (const [key, url] of Object.entries(VERIFIED_FULL_BOOK_PDFS)) {
-    if (normTitle.includes(normalizeKey(key))) {
-      targetPdfUrl = url;
-      break;
+  // 0. PHASE 5: Check if the Admin has repaired or uploaded a custom PDF for this book in SQLite
+  const adminCustomUrl = getCustomPdfUrl(title);
+  if (adminCustomUrl) {
+    if (adminCustomUrl.startsWith("local://")) {
+      const localFile = adminCustomUrl.replace("local://", "");
+      const safeLocalPath = path.join(
+        process.cwd(),
+        "storage",
+        "pdfs",
+        path.basename(localFile)
+      );
+      if (fs.existsSync(safeLocalPath)) {
+        const fileBuffer = fs.readFileSync(safeLocalPath);
+        const headers = new Headers();
+        headers.set("Content-Type", "application/pdf");
+        headers.set(
+          "Content-Disposition",
+          `attachment; filename="${filename}"`
+        );
+        headers.set("Content-Length", String(fileBuffer.byteLength));
+        return new NextResponse(fileBuffer, { status: 200, headers });
+      }
+    }
+  }
+
+  // 1. Check verified 100% open full-book PDF catalog (or Admin custom URL)
+  let targetPdfUrl: string | null =
+    adminCustomUrl && !adminCustomUrl.startsWith("local://")
+      ? adminCustomUrl
+      : null;
+
+  if (!targetPdfUrl) {
+    for (const [key, url] of Object.entries(VERIFIED_FULL_BOOK_PDFS)) {
+      if (normTitle.includes(normalizeKey(key))) {
+        targetPdfUrl = url;
+        break;
+      }
     }
   }
 
@@ -227,7 +262,7 @@ export async function GET(request: NextRequest) {
       const upstream = await fetch(targetPdfUrl, {
         headers: {
           "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            "ClariceAssisLibrary/1.0 (https://github.com/Matheus-Putrique/Clarice-Assis)"
         }
       });
 
@@ -265,10 +300,27 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  // 5. Never substitute another book! Return a clear 404 JSON if no public full-book PDF exists for this title
+  // 5. PHASE 5: Never substitute another book! Return null payload, inform the user, and AUTOMATICALLY notify the Admin in SQLite!
+  const sessionUser = getSessionUser(request);
+  const reporterLabel = sessionUser
+    ? `${sessionUser.name} (${sessionUser.email})`
+    : "Leitor Visitante (Alerta Automático de Download)";
+
+  const issueId = reportPdfIssue(
+    title,
+    author || "Autor não informado",
+    "Falha/Indisponibilidade ao tentar baixar o PDF completo. O sistema retornou nulo e acionou a fila de manutenção do Admin.",
+    reporterLabel
+  );
+
   return NextResponse.json(
     {
-      error: `O arquivo PDF completo de "${title}" não está disponível em domínio público aberto no momento.`
+      pdf: null,
+      adminNotified: true,
+      issueId,
+      error: `Este PDF ("${title}") está apresentando algum problema ou indisponibilidade no acervo. O Administrador já foi notificado automaticamente (Chamado #${
+        issueId || "Novo"
+      }) para que uma correção seja feita!`
     },
     { status: 404 }
   );

@@ -81,7 +81,7 @@ export function getDb(): DatabaseSync {
     );
   `);
 
-  // 5. PDF Issue Reports Table (Prepared for Phase 5 User/Admin PDF error notifications)
+  // 5. PDF Issue Reports Table (Phase 5 User/Admin PDF error notifications)
   db.exec(`
     CREATE TABLE IF NOT EXISTS pdf_issues (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -90,7 +90,34 @@ export function getDb(): DatabaseSync {
       error_details TEXT NOT NULL,
       reported_by TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending',
+      resolved_pdf_url TEXT,
+      resolved_at TEXT,
       created_at TEXT NOT NULL
+    );
+  `);
+
+  // Safe migration for existing databases created in Phase 4
+  try {
+    db.exec("ALTER TABLE pdf_issues ADD COLUMN resolved_pdf_url TEXT;");
+  } catch {
+    // Column already exists
+  }
+  try {
+    db.exec("ALTER TABLE pdf_issues ADD COLUMN resolved_at TEXT;");
+  } catch {
+    // Column already exists
+  }
+
+  // 6. Custom / Admin-Repaired PDFs Table (Phase 5 Admin PDF overrides & uploads)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS custom_pdfs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      book_key TEXT NOT NULL UNIQUE,
+      book_title TEXT NOT NULL,
+      book_author TEXT NOT NULL,
+      pdf_url TEXT NOT NULL,
+      updated_by TEXT NOT NULL,
+      updated_at TEXT NOT NULL
     );
   `);
 
@@ -183,4 +210,94 @@ export function checkRateLimit(
 
   existing.count += 1;
   return { allowed: true, retryAfterSec: 0 };
+}
+
+export function normalizeDbBookKey(title: string): string {
+  return title
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\([^)]*\)/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Checks if an Admin has configured or uploaded a custom PDF override for a book
+ */
+export function getCustomPdfUrl(title: string): string | null {
+  try {
+    const db = getDb();
+    const bookKey = normalizeDbBookKey(title);
+    if (!bookKey) return null;
+
+    const exact = db
+      .prepare("SELECT pdf_url FROM custom_pdfs WHERE book_key = ?")
+      .get(bookKey) as { pdf_url: string } | undefined;
+    if (exact?.pdf_url) return exact.pdf_url;
+
+    const rows = db
+      .prepare("SELECT book_key, pdf_url FROM custom_pdfs")
+      .all() as Array<{ book_key: string; pdf_url: string }>;
+
+    for (const row of rows) {
+      if (
+        row.book_key &&
+        (bookKey.includes(row.book_key) || row.book_key.includes(bookKey))
+      ) {
+        return row.pdf_url;
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Logs a PDF error/issue to notify the Administrator automatically (avoiding duplicate pending tickets)
+ */
+export function reportPdfIssue(
+  bookTitle: string,
+  bookAuthor: string,
+  errorDetails: string,
+  reportedBy: string
+): number | null {
+  try {
+    const db = getDb();
+    const cleanTitle = bookTitle.trim() || "Obra Sem Título";
+    const cleanAuthor = bookAuthor.trim() || "Autor Desconhecido";
+    const nowFormatted = new Date().toLocaleString("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+
+    const existing = db
+      .prepare(
+        "SELECT id FROM pdf_issues WHERE LOWER(book_title) = LOWER(?) AND status = 'pending'"
+      )
+      .get(cleanTitle) as { id: number } | undefined;
+
+    if (existing?.id) {
+      db.prepare(
+        "UPDATE pdf_issues SET error_details = ?, reported_by = ?, created_at = ? WHERE id = ?"
+      ).run(errorDetails, reportedBy, nowFormatted, existing.id);
+      return existing.id;
+    }
+
+    const result = db
+      .prepare(
+        `INSERT INTO pdf_issues (book_title, book_author, error_details, reported_by, status, created_at)
+         VALUES (?, ?, ?, ?, 'pending', ?)`
+      )
+      .run(cleanTitle, cleanAuthor, errorDetails, reportedBy, nowFormatted);
+
+    return Number(result.lastInsertRowid);
+  } catch {
+    return null;
+  }
 }

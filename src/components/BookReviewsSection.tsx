@@ -15,7 +15,8 @@ import {
   PenTool,
   Store,
   ExternalLink,
-  Loader2
+  Loader2,
+  Trash2
 } from "lucide-react";
 
 interface BookReviewsSectionProps {
@@ -186,6 +187,24 @@ export default function BookReviewsSection({
       }
       return updated;
     });
+  };
+
+  const handleAdminDeleteReview = async (reviewId: string) => {
+    try {
+      const res = await fetch("/api/admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "delete_review",
+          reviewId
+        })
+      });
+      if (res.ok) {
+        setReviews((prev) => prev.filter((r) => r.id !== reviewId));
+      }
+    } catch {
+      // Ignore
+    }
   };
 
   const handleSubmitReview = async (e: React.FormEvent) => {
@@ -682,19 +701,33 @@ export default function BookReviewsSection({
                   </p>
                 </div>
 
-                <div className="pt-2 border-t border-[#EAE0CE] flex items-center justify-between">
-                  <button
-                    type="button"
-                    onClick={() => handleToggleLike(rev.id)}
-                    className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full border transition-all cursor-pointer ${
-                      isLiked
-                        ? "bg-[#2C1E16] text-[#E2B86B] border-[#2C1E16]"
-                        : "bg-[#FBF8F3] text-[#6E5641] border-[#DFD2BE] hover:bg-[#E8DEC8]"
-                    }`}
-                  >
-                    <ThumbsUp className="w-3 h-3" />
-                    <span>Útil ({displayLikes})</span>
-                  </button>
+                <div className="pt-2 border-t border-[#EAE0CE] flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleLike(rev.id)}
+                      className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full border transition-all cursor-pointer ${
+                        isLiked
+                          ? "bg-[#2C1E16] text-[#E2B86B] border-[#2C1E16]"
+                          : "bg-[#FBF8F3] text-[#6E5641] border-[#DFD2BE] hover:bg-[#E8DEC8]"
+                      }`}
+                    >
+                      <ThumbsUp className="w-3 h-3" />
+                      <span>Útil ({displayLikes})</span>
+                    </button>
+
+                    {currentUser?.role === "admin" && isFromSite && (
+                      <button
+                        type="button"
+                        onClick={() => handleAdminDeleteReview(rev.id)}
+                        className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full bg-red-900/10 hover:bg-red-900/20 text-red-900 transition-colors cursor-pointer"
+                        title="Moderação Admin: Excluir esta avaliação do banco SQLite"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Excluir (Admin)</span>
+                      </button>
+                    )}
+                  </div>
 
                   {rev.sourceUrl && (
                     <a

@@ -20,7 +20,7 @@ flowchart LR
     Fase1["Fase 1: Catálogo & UX\n• Busca com Autocomplete\n• Corredores Temáticos\n• Identidade Visual & Logo"] --> Fase2["Fase 2: Livros & Livrarias\n• Download de PDFs Integrais\n• Limpeza de Links Comerciais\n• Ficha Catalográfica"]
     Fase2 --> Fase3["Fase 3: Avaliações Reais\n• Zero Resenhas Fictícias\n• Agregação Multi-Lojas\n• Resenhas da Comunidade"]
     Fase3 --> Fase4["Fase 4: Banco & Segurança\n• SQLite WAL Concorrente\n• Autenticação PBKDF2-SHA512\n• Estante Sincronizada"]
-    Fase4 -.-> Fase5["Fase 5 (Próxima):\n• Painel Administrativo\n• Relatórios de Acervo & Auditoria"]
+    Fase4 --> Fase5["Fase 5: Painel Admin & Alertas\n• Divisão Leitor vs. Admin\n• Retorno Null & Chamados de PDF\n• Upload/Reparo de PDF & Moderação"]
 ```
 
 ---
@@ -138,15 +138,16 @@ npx tsc --noEmit
 
 ---
 
-## 🔮 6. Próximos Passos (Fase 5 — Futuro)
-
-1. **Painel do Administrador / Curador:**
-   - Visualização de todas as contas cadastradas.
-   - Moderação e exclusão de resenhas impróprias enviadas no site.
-2. **Central de Alertas de PDF:**
-   - Tela administrativa para monitorar obras onde leitores relataram PDFs ausentes em domínio público.
-3. **Auditoria Geral & Otimização de Performance:**
-   - Métricas do Core Web Vitals e cache de requisições externas para alta escalabilidade.
+## 🛠️ 4.5. Divisão Usuário vs. Admin, Retorno Nulo & Alertas de PDF (Fase 5)
+1. **Tratamento Inteligente de Falhas no PDF (`return null` + Notificação Automática):**
+   - Caso um PDF apresente erro, link indisponível ou não seja encontrado nas bases públicas, a rota `/api/pdf` retorna `{ pdf: null, adminNotified: true }` e registra automaticamente um chamado pendente na tabela `pdf_issues` do SQLite.
+   - O leitor recebe um alerta claro na ficha da obra informando que o PDF está em manutenção e que o Administrador já foi notificado para correção.
+   - Além do disparo automático, qualquer leitor também pode clicar no botão **"Reportar Problema no PDF"** na ficha do livro.
+2. **Painel do Bibliotecário Chefe (`AdminPanelModal` & `/api/admin`):**
+   - Acessível exclusivamente para contas com perfil `admin` (credencial demo: `admin@clariceassis.com.br` / senha: `clarice123`).
+   - **Fila de Chamados de PDF (`pdf_issues`):** Lista todos os alertas pendentes e resolvidos.
+   - **Reparo Direto & Upload de `.PDF` (`custom_pdfs`):** O Admin pode solucionar qualquer chamado colando uma nova URL de PDF válida ou fazendo upload de um arquivo `.PDF` direto do computador (validado por *magic bytes* `%PDF` e salvo em `storage/pdfs/`).
+   - **Moderação de Avaliações & Gestão de Usuários:** Permite excluir avaliações do site no banco SQLite e gerenciar permissões entre `Leitor (Usuário)` e `Bibliotecário Admin`.
 
 ---
-*Biblioteca Clarice Assis — Literatura, elegância e código refinado.*
+*Biblioteca Clarice Assis — Literatura, elegância e código refinado (Fases 1 a 5 Concluídas).*
