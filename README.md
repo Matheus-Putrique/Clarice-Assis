@@ -4,8 +4,21 @@
   <img src="public/logo-clarice-assis.png" alt="Logo Biblioteca Clarice Assis" width="280" />
 </p>
 
+<p align="center">
+  <a href="https://clarice-assis.vercel.app" target="_blank">
+    <img src="https://img.shields.io/badge/Vercel_Live-clarice--assis.vercel.app-2C1E16?style=for-the-badge&logo=vercel&logoColor=E2B86B" alt="Acesse na Vercel" />
+  </a>
+  <a href="https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FMatheus-Putrique%2FClarice-Assis&env=ADMIN_EMAIL,ADMIN_PASSWORD&project-name=clarice-assis&repository-name=Clarice-Assis" target="_blank">
+    <img src="https://img.shields.io/badge/Deploy_na_Vercel-1--Click_Import-3A5A40?style=for-the-badge&logo=vercel&logoColor=white" alt="Deploy with Vercel" />
+  </a>
+  <img src="https://img.shields.io/badge/Next.js_16-TypeScript_5-C89D54?style=for-the-badge&logo=nextdotjs&logoColor=2C1E16" alt="Next.js 16 & TypeScript" />
+</p>
+
 > **Homenagem Literária:** Uma plataforma digital clássica e aconchegante batizada em tributo à introspecção poética de **Clarice Lispector** e à ironia fina de **Machado de Assis**.  
-> **Direção de Arte:** *Dark Academia*, cafeteria literária clássica, tons de pergaminho (`#FBF8F3`), madeira mogno (`#2C1E16`), dourado envelhecido (`#C89D54`) e verde-musgo (`#3A5A40`).
+> **Direção de Arte:** *Dark Academia*, cafeteria literária clássica, tons de pergaminho (`#FBF8F3`), madeira mogno (`#2C1E16`), dourado envelhecido (`#C89D54`) e verde-musgo (`#3A5A40`).  
+> **Produção (Vercel):** **[https://clarice-assis.vercel.app](https://clarice-assis.vercel.app)**
+
+![Banner Oficial Biblioteca Clarice Assis](public/screenshots/linkedin_post_clarice_assis.png)
 
 ---
 
@@ -160,27 +173,17 @@ Clarice-Assis/
 
 ---
 
-## 🚀 7. Como Executar o Projeto Localmente
+## ☁️ 7. Deploy em Produção (Vercel) & Execução
 
-### Pré-requisitos
-- **Node.js 20+** (com suporte nativo a `node:sqlite`)
-- **Git**
+### 🌐 Acesso Online (Vercel Cloud)
+O projeto conta com configuração nativa em `vercel.json` otimizada para a região **`gru1` (São Paulo, Brasil)** e adaptação automática de armazenamento serverless (`os.tmpdir()` em ambiente cloud):
 
-### Passo a Passo
+- **URL de Produção:** **[https://clarice-assis.vercel.app](https://clarice-assis.vercel.app)**
+- **Importação Direta na Vercel:**  
+  [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FMatheus-Putrique%2FClarice-Assis&env=ADMIN_EMAIL,ADMIN_PASSWORD&project-name=clarice-assis&repository-name=Clarice-Assis)
 
-```bash
-# 1. Clone o repositório
-git clone https://github.com/Matheus-Putrique/Clarice-Assis.git
-cd Clarice-Assis
-
-# 2. Instale as dependências
-npm install
-
-# 3. Configure suas variáveis de ambiente privadas
-cp .env.example .env.local
-```
-
-Edite o arquivo `.env.local` (que nunca sobe para o GitHub) definindo o e-mail e uma senha forte para o Administrador, além das credenciais SMTP opcionais:
+### Variáveis de Ambiente na Vercel (`Environment Variables`)
+No painel do seu projeto na Vercel (**Settings → Environment Variables**), configure suas credenciais privadas (que nunca ficam expostas no código):
 
 ```env
 ADMIN_NAME="Bibliotecário Chefe"
@@ -195,12 +198,14 @@ SMTP_PASS=""
 SMTP_FROM="Biblioteca Clarice Assis <no-reply@seudominio.com>"
 ```
 
+### Desenvolvimento & Build Local (Opcional)
 ```bash
-# 4. Inicie o servidor de desenvolvimento
-npm run dev
+git clone https://github.com/Matheus-Putrique/Clarice-Assis.git
+cd Clarice-Assis
+npm install
+cp .env.example .env.local
+npm run build && npm run start
 ```
-
-Acesse **[http://localhost:3000](http://localhost:3000)** no seu navegador.
 
 ---
 *Desenvolvido com dedicação literária — Biblioteca Clarice Assis.*

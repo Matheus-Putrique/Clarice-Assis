@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
-import { getCustomPdfUrl, reportPdfIssue } from "@/lib/db";
+import { getCustomPdfUrl, getStorageDir, reportPdfIssue } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
 
 /**
@@ -217,8 +217,7 @@ export async function GET(request: NextRequest) {
     if (adminCustomUrl.startsWith("local://")) {
       const localFile = adminCustomUrl.replace("local://", "");
       const safeLocalPath = path.join(
-        process.cwd(),
-        "storage",
+        getStorageDir(),
         "pdfs",
         path.basename(localFile)
       );

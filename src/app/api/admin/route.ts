@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   getDb,
+  getStorageDir,
   normalizeDbBookKey,
   reportPdfIssue,
   checkRateLimit
@@ -212,7 +213,7 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        const pdfDir = path.join(process.cwd(), "storage", "pdfs");
+        const pdfDir = path.join(getStorageDir(), "pdfs");
         if (!fs.existsSync(pdfDir)) {
           fs.mkdirSync(pdfDir, { recursive: true });
         }

@@ -2,10 +2,18 @@ import { DatabaseSync } from "node:sqlite";
 import crypto from "node:crypto";
 import path from "node:path";
 import fs from "node:fs";
+import os from "node:os";
 
-// Database lives OUTSIDE src/ so the Next.js/Turbopack/Tailwind file watchers never touch
-// the locked .sqlite / -shm / -wal files (which crashed the dev server on Windows).
-const DATA_DIR = path.join(process.cwd(), "storage");
+// Locally, database lives in ./storage (outside src/ so Next.js/Turbopack watchers never lock it).
+// On Vercel Serverless (where /var/task is read-only), it automatically uses /tmp/clarice-assis-storage.
+export function getStorageDir(): string {
+  if (process.env.VERCEL) {
+    return path.join(os.tmpdir(), "clarice-assis-storage");
+  }
+  return path.join(process.cwd(), "storage");
+}
+
+const DATA_DIR = getStorageDir();
 const DB_FILE_PATH = path.join(DATA_DIR, "clarice-assis.sqlite");
 
 // Singleton SQLite connection

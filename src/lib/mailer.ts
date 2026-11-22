@@ -1,6 +1,7 @@
 import nodemailer from "nodemailer";
 import fs from "node:fs";
 import path from "node:path";
+import { getStorageDir } from "@/lib/db";
 
 export interface WelcomeEmailResult {
   sent: boolean;
@@ -129,7 +130,7 @@ export async function sendWelcomeEmail(params: {
 
   // Always archive a local copy in storage/emails/ (gitignored) for immediate audit
   try {
-    const outboxDir = path.join(process.cwd(), "storage", "emails");
+    const outboxDir = path.join(getStorageDir(), "emails");
     if (!fs.existsSync(outboxDir)) {
       fs.mkdirSync(outboxDir, { recursive: true });
     }
