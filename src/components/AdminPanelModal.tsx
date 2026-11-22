@@ -332,7 +332,7 @@ export default function AdminPanelModal({
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-[11px] uppercase tracking-widest text-[#C89D54] font-bold">
-                  Fase 5 • Curadoria & Manutenção do Acervo
+                  Curadoria &amp; Manutenção do Acervo
                 </span>
                 <span className="px-2 py-0.5 rounded-full bg-[#3A5A40] text-white text-[10px] font-bold">
                   MODO ADMIN ATIVO

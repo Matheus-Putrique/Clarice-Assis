@@ -496,7 +496,7 @@ export default function ClariceAssisLibrary() {
           </div>
           <div className="flex items-center gap-4 text-[11px] uppercase tracking-wider text-[#C89D54]">
             <span className="flex items-center gap-1">
-              <Sparkles className="w-3 h-3" /> Fase 5 Ativa: Divisão Usuário vs. Admin & Alertas de PDF
+              <Sparkles className="w-3 h-3" /> Acervo Literário &amp; Gabinete de Leitura
             </span>
           </div>
         </div>
@@ -1203,56 +1203,6 @@ export default function ClariceAssisLibrary() {
               </button>
             </div>
           )}
-
-        {/* Roadmap Progress Banner at the Bottom */}
-        <section className="mt-16 bg-[#2C1E16] text-[#FBF8F3] rounded-3xl p-8 border-2 border-[#C89D54]/50 shadow-xl">
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-            <div className="space-y-2 max-w-xl">
-              <span className="text-xs uppercase tracking-widest text-[#C89D54] font-semibold flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5" /> Evolução Passo a Passo (Vibe Coding)
-              </span>
-              <h3 className="font-serif-title text-2xl font-bold">
-                Arquitetura da Biblioteca Clarice Assis
-              </h3>
-              <p className="text-sm text-[#D9CBB8] font-serif-body">
-                Construindo o projeto em etapas seguras para garantir código limpo, zero erros e visual refinado.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 w-full md:w-auto">
-              <div className="p-3.5 rounded-xl bg-[#36251B] border border-[#5C4028] text-xs">
-                <div className="flex items-center gap-1.5 text-[#3A5A40] bg-[#E8DEC8] px-2 py-0.5 rounded-full w-fit font-bold mb-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Fase 1
-                </div>
-                <p className="text-[#E6D7C3]">Catálogo & Edições</p>
-              </div>
-              <div className="p-3.5 rounded-xl bg-[#36251B] border border-[#5C4028] text-xs">
-                <div className="flex items-center gap-1.5 text-[#3A5A40] bg-[#E8DEC8] px-2 py-0.5 rounded-full w-fit font-bold mb-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Fase 2
-                </div>
-                <p className="text-[#E6D7C3]">PDF Completo & Livrarias</p>
-              </div>
-              <div className="p-3.5 rounded-xl bg-[#36251B] border border-[#5C4028] text-xs">
-                <div className="flex items-center gap-1.5 text-[#3A5A40] bg-[#E8DEC8] px-2 py-0.5 rounded-full w-fit font-bold mb-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Fase 3
-                </div>
-                <p className="text-[#E6D7C3]">Avaliações Multi-Lojas</p>
-              </div>
-              <div className="p-3.5 rounded-xl bg-[#36251B] border border-[#5C4028] text-xs">
-                <div className="flex items-center gap-1.5 text-[#3A5A40] bg-[#E8DEC8] px-2 py-0.5 rounded-full w-fit font-bold mb-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Fase 4
-                </div>
-                <p className="text-[#E6D7C3]">Banco SQLite & Login</p>
-              </div>
-              <div className="p-3.5 rounded-xl bg-[#3E2A1E] border-2 border-[#C89D54] text-xs shadow-md">
-                <div className="flex items-center gap-1.5 text-[#E2B86B] font-bold mb-1">
-                  <CheckCircle2 className="w-4 h-4" /> Fase 5 (Ativa)
-                </div>
-                <p className="text-[#FBF8F3]">Painel Admin & Alertas</p>
-              </div>
-            </div>
-          </div>
-        </section>
       </main>
 
       {/* Book Detail Modal (Ficha Catalográfica Completa) */}
@@ -1738,7 +1688,7 @@ export default function ClariceAssisLibrary() {
             <span>— Homenagem a Clarice Lispector & Machado de Assis</span>
           </div>
           <p className="text-[#9E8870]">
-            Construído passo a passo com Next.js Full-Stack + SQLite • Fase 5 Concluída (Sistema Completo)
+            Acervo Literário Digital • Gabinete de Leitura &amp; Cultura
           </p>
         </div>
       </footer>
